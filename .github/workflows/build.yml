@@ -99,10 +99,14 @@ jobs:
           path: wb-pro-windows-x64.zip
           if-no-files-found: error
 
+  # 用 Intel 镜像：产物是 x86_64 的 .app，Apple Silicon 上靠 Rosetta 2 也能跑，
+  # 反过来 arm64 包在 Intel Mac 上则完全跑不起来。另外 macos-latest 的 arm64
+  # 池子常年排队，Intel 镜像通常能更快拿到 runner。
   macos:
-    name: macOS
+    name: macOS x64
     needs: quality
-    runs-on: macos-latest
+    runs-on: macos-15-intel
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -123,7 +127,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wb-pro-macos
+          name: wb-pro-macos-x64
           path: wb-pro-macos.zip
           if-no-files-found: error
 
@@ -134,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
