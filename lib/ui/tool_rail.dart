@@ -40,7 +40,12 @@ const List<ToolDescriptor> kTools = <ToolDescriptor>[
 ];
 
 /// 左侧竖排工具栏（移动端会横过来放到底部）。
-class ToolRail extends StatelessWidget {
+///
+/// 两处窄屏细节值得说明：工具一多就必然要滚动，而「能滚」这件事在触屏上
+/// 完全没有提示，用户会以为只有眼前这几个工具。所以两端做了随滚动位置变化
+/// 的渐隐，看到边缘被削掉一半的图标就知道还能滑。「样式」按钮则固定在最右，
+/// 不参与滚动 —— 否则手机上想改颜色得先滑到底，路径太长。
+class ToolRail extends StatefulWidget {
   const ToolRail({
     super.key,
     required this.controller,
@@ -57,63 +62,187 @@ class ToolRail extends StatelessWidget {
   final bool horizontal;
 
   @override
+  State<ToolRail> createState() => _ToolRailState();
+}
+
+class _ToolRailState extends State<ToolRail> {
+  final ScrollController _scroll = ScrollController();
+
+  bool _atStart = true;
+
+  /// 先假设「右边还有东西」，布局完再校正。
+  ///
+  /// 反过来（初始 true、量完再改）会让首帧直接走「两端都贴边」的捷径，
+  /// 之后再想变成渐隐就得等一次完整重建；而首帧本来就在窗口还没显示时，
+  /// 提前画一帧渐隐用户看不见，代价为零。
+  bool _atEnd = false;
+  bool _syncScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_syncEdges);
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_syncEdges);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _syncEdges() {
+    if (!mounted || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    final atStart = position.pixels <= 2;
+    final atEnd = position.pixels >= position.maxScrollExtent - 2;
+    if (atStart != _atStart || atEnd != _atEnd) {
+      setState(() {
+        _atStart = atStart;
+        _atEnd = atEnd;
+      });
+    }
+  }
+
+  /// 首帧拿不到 maxScrollExtent，布局完再量一次。
+  void _scheduleSync() {
+    if (_syncScheduled) return;
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      _syncEdges();
+    });
+  }
+
+  List<Widget> _items(BuildContext context) {
+    final children = <Widget>[];
+    var lastGroup = -1;
+    for (final tool in kTools) {
+      if (lastGroup != -1 && tool.group != lastGroup) {
+        children.add(_gap(context));
+      }
+      lastGroup = tool.group;
+      children.add(
+        WbToolButton(
+          icon: tool.icon,
+          label: '${tool.label}  ${tool.shortcut}',
+          selected: widget.controller.tool == tool.kind,
+          onTap: () => widget.controller.setTool(tool.kind),
+        ),
+      );
+    }
+    children.add(_gap(context));
+    children.add(
+      WbToolButton(
+        icon: Icons.image_outlined,
+        label: '插入图片',
+        selected: false,
+        onTap: widget.onImportImage,
+      ),
+    );
+    return children;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: widget.controller,
       builder: (context, _) {
-        final children = <Widget>[];
-        var lastGroup = -1;
-        for (final tool in kTools) {
-          if (lastGroup != -1 && tool.group != lastGroup) {
-            children.add(_gap(context, horizontal));
-          }
-          lastGroup = tool.group;
-          children.add(
-            WbToolButton(
-              icon: tool.icon,
-              label: '${tool.label}  ${tool.shortcut}',
-              selected: controller.tool == tool.kind,
-              onTap: () => controller.setTool(tool.kind),
-            ),
-          );
-        }
-        children.add(_gap(context, horizontal));
-        children.add(
-          WbToolButton(
-            icon: Icons.image_outlined,
-            label: '插入图片',
-            selected: false,
-            onTap: onImportImage,
-          ),
-        );
-        if (onOpenInspector != null) {
-          children.add(_gap(context, horizontal));
-          children.add(
-            WbToolButton(
-              icon: Icons.tune,
-              label: '样式',
-              selected: false,
-              onTap: onOpenInspector!,
-            ),
-          );
-        }
-
-        if (horizontal) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(children: children),
-          );
-        }
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(children: children),
-        );
+        return widget.horizontal ? _horizontal(context) : _vertical(context);
       },
     );
   }
 
-  Widget _gap(BuildContext context, bool horizontal) => horizontal
+  Widget _horizontal(BuildContext context) {
+    _scheduleSync();
+    return Row(
+      children: <Widget>[
+        Expanded(
+          // 常驻的细滚动条 + 两端渐隐，两个信号叠着用：滚动条说明「这里能滑」，
+          // 渐隐说明「现在滑到哪一端」。只靠渐隐不够，内容边界正好落在按钮间隙时
+          // 会被削得看不出来。
+          child: Scrollbar(
+            controller: _scroll,
+            thumbVisibility: true,
+            thickness: 2,
+            radius: const Radius.circular(2),
+            child: _fadeEdges(
+              context,
+              SingleChildScrollView(
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 7),
+                child: Row(children: _items(context)),
+              ),
+            ),
+          ),
+        ),
+        if (widget.onOpenInspector != null) ...<Widget>[
+          Container(width: 1, height: 26, color: WbTheme.hairline(context)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 5, 8, 5),
+            child: WbToolButton(
+              icon: Icons.tune,
+              label: '样式',
+              selected: false,
+              onTap: widget.onOpenInspector!,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _vertical(BuildContext context) {
+    _scheduleSync();
+    final children = _items(context);
+    if (widget.onOpenInspector != null) {
+      children.add(_gap(context));
+      children.add(
+        WbToolButton(
+          icon: Icons.tune,
+          label: '样式',
+          selected: false,
+          onTap: widget.onOpenInspector!,
+        ),
+      );
+    }
+    return _fadeEdges(
+      context,
+      SingleChildScrollView(
+        controller: _scroll,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(children: children),
+      ),
+    );
+  }
+
+  /// 两端按滚动位置渐隐：贴边的一端不再淡出，否则首尾图标会一直发灰。
+  Widget _fadeEdges(BuildContext context, Widget child) {
+    // 还没 attach 到滚动视图时宽度未知，先按原样画，等量完再决定。
+    if (!_scroll.hasClients || (_atStart && _atEnd)) return child;
+    final horizontal = widget.horizontal;
+    return ShaderMask(
+      shaderCallback: (Rect bounds) {
+        final clear = Colors.white.withValues(alpha: 0);
+        return LinearGradient(
+          begin: horizontal ? Alignment.centerLeft : Alignment.topCenter,
+          end: horizontal ? Alignment.centerRight : Alignment.bottomCenter,
+          colors: <Color>[
+            _atStart ? Colors.white : clear,
+            Colors.white,
+            Colors.white,
+            _atEnd ? Colors.white : clear,
+          ],
+          stops: const <double>[0, 0.06, 0.94, 1],
+        ).createShader(bounds);
+      },
+      blendMode: BlendMode.dstIn,
+      child: child,
+    );
+  }
+
+  Widget _gap(BuildContext context) => widget.horizontal
       ? Container(
           width: 1,
           height: 22,
