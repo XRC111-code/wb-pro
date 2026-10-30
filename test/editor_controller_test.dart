@@ -7,15 +7,21 @@ import 'package:wb_pro/state/editor_controller.dart';
 
 const Color _black = Color(0xFF1F2933);
 
-WbElement _shape(String id, {double x = 0, double y = 0, double size = 20}) =>
+WbElement _shape(
+  String id, {
+  double x = 0,
+  double y = 0,
+  double size = 20,
+  bool filled = true,
+  ShapeKind shape = ShapeKind.rectangle,
+}) =>
     ShapeElement(
       id: id,
       frame: Rect.fromLTWH(x, y, size, size),
-      shape: ShapeKind.rectangle,
+      shape: shape,
       stroke: _black,
       strokeWidth: 2,
-      // 带填充才会命中内部点；无填充的形状只认边框，这是设计如此。
-      fill: const Color(0xFFFFFFFF),
+      fill: filled ? const Color(0xFFFFFFFF) : null,
     );
 
 void main() {
@@ -107,6 +113,34 @@ void main() {
       controller.addElement(_shape('b', x: 100));
       final hits = controller.hitTestRect(const Rect.fromLTWH(-5, -5, 40, 40));
       expect(hits.map((e) => e.id), <String>['a']);
+      controller.dispose();
+    });
+
+    test('空心矩形点内部也能选中', () {
+      final controller = EditorController();
+      controller.addElement(_shape('hollow', size: 200, filled: false));
+      // 正中间离四条边各有 100px，精确命中必然落空
+      expect(controller.hitTest(const Offset(100, 100))!.id, 'hollow');
+      controller.dispose();
+    });
+
+    test('空心椭圆按真路径判断，包围盒角落不命中', () {
+      final controller = EditorController();
+      controller.addElement(
+        _shape('oval', size: 200, filled: false, shape: ShapeKind.ellipse),
+      );
+      expect(controller.hitTest(const Offset(4, 4)), isNull);
+      expect(controller.hitTest(const Offset(100, 100))!.id, 'oval');
+      controller.dispose();
+    });
+
+    test('上层的空心框不挡住下面元素的边线', () {
+      final controller = EditorController();
+      controller.addElement(_shape('under', x: 100, y: 100, size: 40));
+      controller.addElement(_shape('over', size: 400, filled: false));
+      // (100,100) 既在 under 的填充里，也在 over 的内部。
+      // 精确命中要先跑完一圈，才轮到宽松命中。
+      expect(controller.hitTest(const Offset(100, 100))!.id, 'under');
       controller.dispose();
     });
 

@@ -393,6 +393,11 @@ class EditorController extends ChangeNotifier {
       final element = _elements[i];
       if (element.hitTest(world, tolerance: tolerance)) return element;
     }
+    // 一圈都没点中边线，再放宽到「点进内部也算」。没有这一遍，空心矩形
+    // 只有边框能选中，触摸屏上等于点不到。
+    for (var i = _elements.length - 1; i >= 0; i--) {
+      if (_elements[i].hitTestArea(world)) return _elements[i];
+    }
     return null;
   }
 

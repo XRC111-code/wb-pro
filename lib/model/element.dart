@@ -94,6 +94,16 @@ sealed class WbElement {
 
   bool hitTestLocal(Offset p, double tolerance);
 
+  /// 宽松命中：点进元素占据的区域就算，不管那里是不是空白。
+  ///
+  /// [hitTest] 对没有填充的形状只认描边——一个 200×150 的空心矩形，只有离
+  /// 边框三四个像素以内才点得中，鼠标勉强，手指基本不可能。所以选择工具在
+  /// 精确命中全部落空后会退到这一档。
+  ///
+  /// 顺序不能反：如果一上来就宽松匹配，一个大的半透明矩形会把它下面所有
+  /// 元素都挡住，再也点不中。
+  bool hitTestArea(Offset world) => worldBounds.contains(world);
+
   Map<String, Object?> toJson();
 
   Map<String, Object?> baseJson(String type) => <String, Object?>{
@@ -361,6 +371,15 @@ class ShapeElement extends WbElement {
     final path = localPath();
     if (fill != null && path.contains(p)) return true;
     return _distanceToOutline(p) <= strokeWidth / 2 + tolerance;
+  }
+
+  /// 菱形和椭圆用真路径判断，别退化成包围盒——椭圆外面那四个角点下去
+  /// 选中一个「看不见的形状」是很怪的。
+  @override
+  bool hitTestArea(Offset world) {
+    final local = toLocal(world);
+    if (!frame.contains(local)) return false;
+    return localPath().contains(local - frame.topLeft);
   }
 
   @override
