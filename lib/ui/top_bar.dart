@@ -268,10 +268,8 @@ class TopBar extends StatelessWidget {
       item('grid', Icons.grid_on, controller.showGrid ? '隐藏网格' : '显示网格', shortcut: 'Ctrl+G'),
       item('snap', Icons.straighten, controller.snapToGrid ? '关闭吸附' : '吸附到网格', shortcut: 'Ctrl+Shift+G'),
       item('inspector', Icons.tune, '属性面板', shortcut: 'Ctrl+Alt+P'),
-      item('zoomIn', Icons.zoom_in, '放大', shortcut: 'Ctrl+='),
-      item('zoomOut', Icons.zoom_out, '缩小', shortcut: 'Ctrl+-'),
-      item('zoomReset', Icons.center_focus_strong, '实际大小', shortcut: 'Ctrl+0'),
-      item('fit', Icons.fit_screen_outlined, '适应内容', shortcut: 'Shift+1'),
+      // 放大 / 缩小 / 实际大小 / 适应内容 不放进菜单：状态栏右下角一直摆着
+      // 这几个按钮，菜单再列一遍只会把它顶到屏幕外面去。
       const PopupMenuDivider(),
       item('theme', dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
           dark ? '浅色主题' : '深色主题'),
