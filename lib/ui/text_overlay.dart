@@ -24,10 +24,12 @@ class TextEditorOverlay extends StatefulWidget {
   final VoidCallback onCancel;
 
   @override
-  State<TextEditorOverlay> createState() => _TextEditorOverlayState();
+  State<TextEditorOverlay> createState() => TextEditorOverlayState();
 }
 
-class _TextEditorOverlayState extends State<TextEditorOverlay> {
+/// 公开是为了让外层用 GlobalKey 触发提交 —— 点画布空白处结束编辑时，
+/// 只有这里知道输入框里的最新文本。
+class TextEditorOverlayState extends State<TextEditorOverlay> {
   late final TextEditingController _text;
   late final FocusNode _focus;
 
@@ -39,6 +41,11 @@ class _TextEditorOverlayState extends State<TextEditorOverlay> {
     _focus = FocusNode(debugLabel: 'wb-text-editor');
     // 新建的空文本元素直接用全选没有意义，把光标放到末尾更自然。
     _text.selection = TextSelection.collapsed(offset: _text.text.length);
+    // 只靠 TextField.autofocus 不够稳：浮层是在指针按下的同一帧插进 Stack 的，
+    // 紧接着的 pointer-up 可能抢走焦点，用户打第一行字就丢到画布快捷键上了。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
   }
 
   String _initialText(WbElement? element) => switch (element) {
@@ -61,7 +68,9 @@ class _TextEditorOverlayState extends State<TextEditorOverlay> {
     return null;
   }
 
-  void _submit() => widget.onSubmit(_text.text);
+  void submit() => widget.onSubmit(_text.text);
+
+  void _submit() => submit();
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;

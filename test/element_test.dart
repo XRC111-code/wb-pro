@@ -255,6 +255,21 @@ void main() {
       expect(text.resized(const Rect.fromLTWH(0, 0, 1, 30)).fontSize, greaterThan(4));
     });
 
+    test('autoWidth 默认开启，关掉后会被持久化', () {
+      final text = TextElement(
+        id: 't1',
+        frame: const Rect.fromLTWH(0, 0, 100, 30),
+        text: 'x',
+        color: _black,
+      );
+      expect(text.autoWidth, isTrue);
+      expect(text.toJson().containsKey('autoWidth'), isFalse);
+
+      final manual = text.copyWith(autoWidth: false);
+      final restored = WbElement.fromJson(manual.toJson()) as TextElement;
+      expect(restored.autoWidth, isFalse);
+    });
+
     test('JSON 往返保留对齐方式', () {
       final text = TextElement(
         id: 't1',

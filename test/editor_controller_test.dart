@@ -184,6 +184,31 @@ void main() {
       controller.dispose();
     });
 
+    test('新文本框按内容自动加宽', () {
+      final controller = EditorController();
+      final text = controller.createText(Offset.zero);
+      controller.addElement(text);
+      controller.setTextContent(text.id, '这是一段足够长的文字，应该把文本框撑开而不是折成很多短行');
+      final updated = controller.elements.single as TextElement;
+      expect(updated.autoWidth, isTrue);
+      expect(updated.frame.width, greaterThan(text.frame.width));
+      expect(updated.frame.width, lessThanOrEqualTo(600));
+      controller.dispose();
+    });
+
+    test('手动拖过宽度后不再自动加宽', () {
+      final controller = EditorController();
+      final text = controller.createText(Offset.zero, text: '短');
+      controller.addElement(text);
+      final resized = text.resized(const Rect.fromLTWH(0, 0, 300, 40));
+      expect(resized.autoWidth, isFalse);
+      controller.updateElement(resized);
+      controller.setTextContent(text.id, '这是一段足够长的文字，应该被折行而不是继续撑开文本框');
+      final updated = controller.elements.single as TextElement;
+      expect(updated.frame.width, 300);
+      controller.dispose();
+    });
+
     test('文本内容更新后高度重算', () {
       final controller = EditorController();
       final text = controller.createText(Offset.zero);

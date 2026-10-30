@@ -4,6 +4,8 @@
 
 同一套 Flutter 代码构建 Windows、macOS、Linux 与 Android 四个平台，安装包由 GitHub Actions 在每次推送时产出。
 
+![wb-pro 主界面](docs/screenshot.png)
+
 ## 特性
 
 **画布**
@@ -67,7 +69,7 @@ flutter analyze
 flutter test
 ```
 
-150 个用例覆盖几何计算、视口变换、撤销栈、元素序列化、文档容错、SVG 输出、PNG 像素尺寸、控制器规则与主界面交互。
+154 个用例覆盖几何计算、视口变换、撤销栈、元素序列化、文档容错、SVG 输出、PNG 像素尺寸、控制器规则与主界面交互。
 
 ## 快捷键
 

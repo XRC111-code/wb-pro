@@ -30,14 +30,9 @@ import 'widgets.dart';
 /// 职责边界：这里只做「把 IO、对话框、布局串起来」，所有编辑规则都在
 /// [EditorController] 里。这样 90% 的行为可以脱离 Widget 测试。
 class HomePage extends StatefulWidget {
-  const HomePage({
-    super.key,
-    required this.onToggleTheme,
-    this.dark = false,
-  });
+  const HomePage({super.key, required this.onToggleTheme});
 
   final VoidCallback onToggleTheme;
-  final bool dark;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -48,6 +43,7 @@ class _HomePageState extends State<HomePage> {
   late final WbActions _actions;
 
   String? _editingId;
+  final GlobalKey<TextEditorOverlayState> _editorKey = GlobalKey<TextEditorOverlayState>();
   Timer? _autosaveTimer;
   bool _inspectorOpen = true;
   bool _busy = false;
@@ -82,7 +78,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _writeAutosave() async {
-    if (!_controller.dirty || _controller.elements.isEmpty) return;
+    if (!_controller.dirty) return;
     await AutosaveStore.write(_buildDocument().encode());
   }
 
@@ -595,7 +591,6 @@ class _HomePageState extends State<HomePage> {
                 controller: _controller,
                 actions: _actions,
                 compact: compact,
-                inspectorOpen: _inspectorOpen,
               ),
               Expanded(
                 child: Row(
@@ -609,6 +604,8 @@ class _HomePageState extends State<HomePage> {
                               controller: _controller,
                               onEditText: _beginEditing,
                               onNotice: _notice,
+                              ignorePointers: _editingId != null,
+                              onOutsidePointer: () => _editorKey.currentState?.submit(),
                             ),
                           ),
                           Positioned.fill(
@@ -638,6 +635,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                           if (_editingId != null)
                             TextEditorOverlay(
+                              key: _editorKey,
                               controller: _controller,
                               elementId: _editingId!,
                               onSubmit: _submitEditing,

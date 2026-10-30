@@ -120,6 +120,22 @@ void main() {
     expect(find.text('1 个元素'), findsOneWidget);
   });
 
+  testWidgets('文本编辑期间点击画布只结束编辑', (tester) async {
+    await _pumpApp(tester);
+
+    await tester.tap(find.byTooltip('文本  T'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(600, 320));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.text('1 个元素'), findsOneWidget);
+
+    // 点画布空白处：应当只提交并结束编辑，不能顺手再建一个文本框。
+    await tester.tapAt(const Offset(900, 600));
+    await tester.pump(const Duration(milliseconds: 200));
+    // 空文本元素在提交时会被删掉，所以最终是 0 个而不是 1 个。
+    expect(find.text('0 个元素'), findsOneWidget);
+  });
+
   testWidgets('窄屏切换到底部工具条', (tester) async {
     tester.view.physicalSize = const Size(600, 900);
     tester.view.devicePixelRatio = 1.0;

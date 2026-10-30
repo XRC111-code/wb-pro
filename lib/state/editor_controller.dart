@@ -831,7 +831,11 @@ class EditorController extends ChangeNotifier {
       italic: element.italic,
       lineHeight: element.lineHeight,
     );
-    final width = math.max(40.0, element.frame.width);
+    // 自动宽度的文本框按内容撑开，上限 600 —— 再宽就该手动拖了。
+    final natural = measureTextBlock(element.text, style, maxWidth: 600, align: element.align);
+    final width = element.autoWidth
+        ? math.max(40.0, math.min(natural.width + 8, 600.0))
+        : math.max(40.0, element.frame.width);
     final size = measureTextBlock(element.text, style, maxWidth: width, align: element.align);
     return element.copyWith(
       frame: Rect.fromLTWH(

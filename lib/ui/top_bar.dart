@@ -12,13 +12,11 @@ class TopBar extends StatelessWidget {
     required this.controller,
     required this.actions,
     required this.compact,
-    this.inspectorOpen = false,
   });
 
   final EditorController controller;
   final WbActions actions;
   final bool compact;
-  final bool inspectorOpen;
 
   @override
   Widget build(BuildContext context) {

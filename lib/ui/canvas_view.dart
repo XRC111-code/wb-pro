@@ -23,11 +23,20 @@ class CanvasView extends StatefulWidget {
     required this.controller,
     required this.onEditText,
     required this.onNotice,
+    this.ignorePointers = false,
+    this.onOutsidePointer,
   });
 
   final EditorController controller;
   final void Function(WbElement element) onEditText;
   final void Function(String message) onNotice;
+
+  /// 文本浮层打开期间为 true：此时画布不处理指针，否则「点空白处结束编辑」
+  /// 会顺手在原地又新建一个文本框。
+  final bool ignorePointers;
+
+  /// 浮层打开时画布上的点击。用来提交当前编辑。
+  final VoidCallback? onOutsidePointer;
 
   @override
   State<CanvasView> createState() => CanvasViewState();
@@ -87,6 +96,10 @@ class CanvasViewState extends State<CanvasView> {
   // ── 指针事件 ───────────────────────────────────────────────────────────────
 
   void _onPointerDown(PointerDownEvent event) {
+    if (widget.ignorePointers) {
+      widget.onOutsidePointer?.call();
+      return;
+    }
     _pointers[event.pointer] = event.localPosition;
     _controller.setPointerWorld(_toWorld(event.localPosition));
     if (_pointers.length >= 2) {
@@ -150,6 +163,10 @@ class CanvasViewState extends State<CanvasView> {
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    if (widget.ignorePointers) {
+      widget.onOutsidePointer?.call();
+      return;
+    }
     _pointers[event.pointer] = event.localPosition;
     _controller.setPointerWorld(_toWorld(event.localPosition));
 
@@ -578,6 +595,7 @@ class CanvasViewState extends State<CanvasView> {
   // ── 滚轮 / 触控板 ──────────────────────────────────────────────────────────
 
   void _onPointerSignal(PointerSignalEvent event) {
+    if (widget.ignorePointers) return;
     if (event is! PointerScrollEvent) return;
     final keyboard = HardwareKeyboard.instance;
     final zoomModifier = keyboard.isControlPressed || keyboard.isMetaPressed;

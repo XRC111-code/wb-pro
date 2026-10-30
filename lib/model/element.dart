@@ -560,6 +560,7 @@ class TextElement extends WbElement {
     this.italic = false,
     this.align = TextAlign.left,
     this.lineHeight = 1.35,
+    this.autoWidth = true,
     super.rotation,
     super.opacity,
   });
@@ -571,6 +572,13 @@ class TextElement extends WbElement {
   final bool italic;
   final TextAlign align;
   final double lineHeight;
+
+  /// 宽度是否跟随内容。
+  ///
+  /// 新建的文本框初始只有几十像素宽，如果一直按这个宽度排版，用户打一行字会
+  /// 被折成十几个短行。手动拖过宽度之后这个标记就关掉 —— 此时宽度是用户的
+  /// 明确意图，不该被内容再改回去。
+  final bool autoWidth;
 
   @override
   ElementKind get kind => ElementKind.text;
@@ -596,6 +604,7 @@ class TextElement extends WbElement {
     bool? italic,
     TextAlign? align,
     double? lineHeight,
+    bool? autoWidth,
   }) =>
       TextElement(
         id: id ?? this.id,
@@ -607,6 +616,7 @@ class TextElement extends WbElement {
         italic: italic ?? this.italic,
         align: align ?? this.align,
         lineHeight: lineHeight ?? this.lineHeight,
+        autoWidth: autoWidth ?? this.autoWidth,
         rotation: rotation ?? this.rotation,
         opacity: opacity ?? this.opacity,
       );
@@ -616,7 +626,11 @@ class TextElement extends WbElement {
   @override
   TextElement resized(Rect next) {
     final scale = frame.width == 0 ? 1.0 : next.width / frame.width;
-    return copyWith(frame: next, fontSize: (fontSize * scale).clamp(6.0, 400.0).toDouble());
+    return copyWith(
+      frame: next,
+      fontSize: (fontSize * scale).clamp(6.0, 400.0).toDouble(),
+      autoWidth: false,
+    );
   }
 
   @override
@@ -629,6 +643,7 @@ class TextElement extends WbElement {
       'italic': italic,
       'align': align.name,
       'lineHeight': lineHeight,
+      if (!autoWidth) 'autoWidth': false,
     });
 
   static TextElement fromJson(
@@ -652,6 +667,7 @@ class TextElement extends WbElement {
         orElse: () => TextAlign.left,
       ),
       lineHeight: _num(json['lineHeight'], 1.35),
+      autoWidth: _bool(json['autoWidth'], true),
       rotation: rotation,
       opacity: opacity,
     );
