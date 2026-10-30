@@ -41,7 +41,7 @@
 | 平台 | 产物 | 说明 |
 | --- | --- | --- |
 | Windows | `wb-pro-windows-x64.zip` | 解压后运行 `wb_pro.exe` |
-| macOS | `wb-pro-macos.zip` | 未签名，首次打开需右键 → 打开 |
+| macOS | `wb-pro-macos-x64.zip` | x86_64 构建；未签名，首次打开需右键 → 打开 |
 | Linux | `wb-pro-linux-x64.tar.gz` | 解压后运行 `bundle/wb_pro`，需要 GTK 3 |
 | Android | `app-release.apk` / `.aab` | release 包使用 debug 签名，可直接侧载 |
 

@@ -138,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
@@ -150,10 +150,37 @@ jobs:
           cache: true
 
       - run: flutter pub get
+
+      # Flutter 的 Gradle 插件会在配置阶段按 flutter.ndkVersion 自动装 NDK。
+      # 那个包接近 1 GB，GitHub 的 runner 偶尔会把它下成半截 zip 并直接失败
+      # （Error reading Zip content from a SeekableByteChannel），重跑一般就好。
+      # 所以这里单独装、失败就删干净重来，别把损坏的目录留给后面的构建。
+      - name: Install NDK (with retry)
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          NDK="ndk;28.2.13676358"
+          for attempt in 1 2 3; do
+            echo "::group::sdkmanager 安装 $NDK（第 $attempt 次）"
+            if yes | "$SDKMANAGER" --install "$NDK"; then
+              echo "::endgroup::"
+              echo "NDK 就绪"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "::warning::NDK 第 $attempt 次安装失败，清理残留后重试"
+            rm -rf "${ANDROID_HOME:?}/ndk/28.2.13676358"
+            sleep 15
+          done
+          echo "::error::NDK 连续三次安装失败"
+          exit 1
+
       # release 包暂时用 debug 签名，方便直接侧载安装；
       # 上架前请在 android/app/build.gradle.kts 里换成正式签名。
-      - run: flutter build apk --release
-      - run: flutter build appbundle --release
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Build App Bundle
+        run: flutter build appbundle --release
 
       - uses: actions/upload-artifact@v4
         with:
