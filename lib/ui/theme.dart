@@ -10,7 +10,6 @@ class WbTheme {
   static const Color accent = Color(0xFF2F6BFF);
   static const Color accentDark = Color(0xFF7AA2FF);
   static const Color canvasLight = Color(0xFFF7F7F8);
-  static const Color canvasDark = Color(0xFF16181D);
 
   static const double railWidth = 52;
   static const double inspectorWidth = 268;

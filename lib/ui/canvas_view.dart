@@ -9,6 +9,7 @@ import '../model/geometry.dart';
 import '../state/editor_controller.dart';
 import '../state/viewport.dart';
 import '../render/painting.dart';
+import 'theme.dart';
 
 /// 选择框上的控制点索引。
 /// 0..3 是四角（左上、右上、右下、左下），4..7 是四边中点（上、右、下、左）。
@@ -691,7 +692,7 @@ class CanvasViewState extends State<CanvasView> {
                   // 画的内容，属于作品本身：浅色主题下画的深色线条，一切到
                   // 深色就整片看不见了。深色模式该变的是外围的工具栏和面板
                   // —— Figma、Miro 都是这个处理方式。
-                  background: const Color(0xFFF7F7F8),
+                  background: WbTheme.canvasLight,
                   gridColor: const Color(0x14000000),
                   selectionColor: const Color(0xFF2F6BFF),
                   onImageReady: () {
