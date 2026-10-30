@@ -656,9 +656,6 @@ class CanvasViewState extends State<CanvasView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -690,9 +687,13 @@ class CanvasViewState extends State<CanvasView> {
                   controller: _controller,
                   preview: _preview,
                   marquee: _marquee,
-                  background: dark ? const Color(0xFF16181D) : const Color(0xFFF7F7F8),
-                  gridColor: dark ? const Color(0x22FFFFFF) : const Color(0x14000000),
-                  selectionColor: dark ? const Color(0xFF7AA2FF) : const Color(0xFF2F6BFF),
+                  // 画布永远是「白纸」，不跟主题一起变深。上面的颜色是用户
+                  // 画的内容，属于作品本身：浅色主题下画的深色线条，一切到
+                  // 深色就整片看不见了。深色模式该变的是外围的工具栏和面板
+                  // —— Figma、Miro 都是这个处理方式。
+                  background: const Color(0xFFF7F7F8),
+                  gridColor: const Color(0x14000000),
+                  selectionColor: const Color(0xFF2F6BFF),
                   onImageReady: () {
                     if (mounted) setState(() {});
                   },
