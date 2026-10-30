@@ -1,0 +1,876 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../io/document.dart';
+import '../io/document_store.dart';
+import '../io/export_png.dart';
+import '../io/export_svg.dart';
+import '../model/element.dart';
+import '../render/painting.dart';
+import '../state/editor_controller.dart';
+import '../util/id.dart';
+import 'actions.dart';
+import 'canvas_view.dart';
+import 'inspector_panel.dart';
+import 'shortcut_sheet.dart';
+import 'status_bar.dart';
+import 'text_overlay.dart';
+import 'theme.dart';
+import 'tool_rail.dart';
+import 'top_bar.dart';
+import 'widgets.dart';
+
+/// 主界面。
+///
+/// 职责边界：这里只做「把 IO、对话框、布局串起来」，所有编辑规则都在
+/// [EditorController] 里。这样 90% 的行为可以脱离 Widget 测试。
+class HomePage extends StatefulWidget {
+  const HomePage({
+    super.key,
+    required this.onToggleTheme,
+    this.dark = false,
+  });
+
+  final VoidCallback onToggleTheme;
+  final bool dark;
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  late final EditorController _controller;
+  late final WbActions _actions;
+
+  String? _editingId;
+  Timer? _autosaveTimer;
+  bool _inspectorOpen = true;
+  bool _busy = false;
+
+  WbDocument? _recovery;
+  DateTime? _recoveryAt;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = EditorController();
+    _controller.addListener(_onControllerChanged);
+    _actions = _buildActions();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAutosave());
+  }
+
+  @override
+  void dispose() {
+    _autosaveTimer?.cancel();
+    _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // ── 自动保存 ───────────────────────────────────────────────────────────────
+
+  void _onControllerChanged() {
+    if (!_controller.dirty) return;
+    _autosaveTimer?.cancel();
+    // 2 秒静默期：连续落笔时不写盘，停手之后才落一次。
+    _autosaveTimer = Timer(const Duration(seconds: 2), _writeAutosave);
+  }
+
+  Future<void> _writeAutosave() async {
+    if (!_controller.dirty || _controller.elements.isEmpty) return;
+    await AutosaveStore.write(_buildDocument().encode());
+  }
+
+  Future<void> _checkAutosave() async {
+    final raw = await AutosaveStore.read();
+    if (raw == null || !mounted) return;
+    try {
+      final result = WbDocument.decode(raw);
+      if (result.document.elements.isEmpty) return;
+      final at = await AutosaveStore.modifiedAt();
+      if (!mounted) return;
+      setState(() {
+        _recovery = result.document;
+        _recoveryAt = at;
+      });
+    } on DocumentException {
+      // 存档坏了就当没有，不要用一个错误弹窗迎接用户。
+    }
+  }
+
+  // ── 文档 ───────────────────────────────────────────────────────────────────
+
+  WbDocument _buildDocument() => WbDocument(
+        name: _controller.name,
+        elements: _controller.elements,
+        pan: _controller.viewport.pan,
+        zoom: _controller.viewport.zoom,
+      );
+
+  void _loadDocument(WbDocument document, {String? path}) {
+    _cancelEditing();
+    ImageRegistry.clear();
+    _controller.loadDocument(
+      name: document.name,
+      elements: document.elements,
+      filePath: path,
+      pan: document.pan,
+      zoom: document.zoom,
+    );
+  }
+
+  Future<void> _newDocument() async {
+    if (!await _confirmDiscard()) return;
+    _loadDocument(const WbDocument(name: '未命名白板', elements: <WbElement>[]));
+    await AutosaveStore.clear();
+  }
+
+  Future<void> _openDocument() async {
+    if (!await _confirmDiscard()) return;
+    final file = await DocumentStore.openDocument();
+    if (file == null) return;
+    await _openContent(file.content, name: file.name, path: file.path);
+  }
+
+  Future<void> _openContent(String content, {required String name, String? path}) async {
+    try {
+      final result = WbDocument.decode(content);
+      _loadDocument(result.document, path: path);
+      if (result.hasWarnings) _notice(result.warnings.join(' '));
+    } on DocumentException catch (error) {
+      _notice('打开失败：${error.message}');
+    }
+  }
+
+  Future<void> _save() async {
+    final path = _controller.filePath;
+    if (path == null) {
+      await _saveAs();
+      return;
+    }
+    await _writeDocument(path);
+  }
+
+  Future<void> _saveAs() async {
+    final path = await DocumentStore.chooseSavePath(_controller.name);
+    if (path == null) return;
+    await _writeDocument(path);
+  }
+
+  Future<void> _writeDocument(String path) async {
+    final content = _buildDocument().encode();
+    var saved = path;
+    if (!await DocumentStore.writeText(path, content)) {
+      // Android 的 SAF 路径无法直接写；降级到应用目录，至少不丢内容。
+      final fallback = await DocumentStore.writeToDocuments(
+        '${_controller.name}.wbpro',
+        Uint8List.fromList(utf8.encode(content)),
+      );
+      if (fallback == null) {
+        _notice('保存失败：没有写入权限');
+        return;
+      }
+      saved = fallback;
+    }
+    _controller.markSaved(saved);
+    await AutosaveStore.clear();
+    _notice('已保存到 $saved');
+  }
+
+  Future<void> _renameDocument() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameDialog(initial: _controller.name),
+    );
+    if (name != null) {
+      _controller.rename(name);
+      _controller.setDirty(true);
+    }
+  }
+
+  Future<void> _clearCanvas() async {
+    if (_controller.elements.isEmpty) return;
+    final ok = await _confirm(
+      '清空画布',
+      '将删除全部 ${_controller.elements.length} 个元素。可以用 Ctrl+Z 撤销。',
+      confirmLabel: '清空',
+      danger: true,
+    );
+    if (ok) _controller.clearCanvas();
+  }
+
+  Future<bool> _confirmDiscard() async {
+    if (!_controller.dirty) return true;
+    return _confirm(
+      '放弃未保存的修改？',
+      '当前白板有尚未保存的修改。继续操作会丢弃它们（自动存档仍会保留最近一份）。',
+      confirmLabel: '放弃修改',
+      danger: true,
+    );
+  }
+
+  Future<bool> _confirm(
+    String title,
+    String message, {
+    String confirmLabel = '确定',
+    bool danger = false,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(width: 360, child: Text(message)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: danger
+                ? FilledButton.styleFrom(backgroundColor: const Color(0xFFE03131))
+                : null,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  // ── 导出 / 导入 ────────────────────────────────────────────────────────────
+
+  Future<void> _exportPng() async {
+    if (_controller.elements.isEmpty) {
+      _notice('画布上还没有内容');
+      return;
+    }
+    final path = await DocumentStore.chooseSavePath(
+      _controller.name,
+      extension: 'png',
+      label: 'PNG 图片',
+    );
+    if (path == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final bytes = await exportPng(_controller.elements);
+      await _writeBytesWithFallback(path, bytes, '${_controller.name}.png', 'PNG');
+    } catch (error) {
+      _notice('导出 PNG 失败：$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _exportSvg() async {
+    if (_controller.elements.isEmpty) {
+      _notice('画布上还没有内容');
+      return;
+    }
+    final path = await DocumentStore.chooseSavePath(
+      _controller.name,
+      extension: 'svg',
+      label: 'SVG 矢量图',
+    );
+    if (path == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final svg = exportSvg(_controller.elements);
+      await _writeBytesWithFallback(
+        path,
+        Uint8List.fromList(utf8.encode(svg)),
+        '${_controller.name}.svg',
+        'SVG',
+      );
+    } catch (error) {
+      _notice('导出 SVG 失败：$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _writeBytesWithFallback(
+    String path,
+    Uint8List bytes,
+    String name,
+    String label,
+  ) async {
+    if (await DocumentStore.writeBytes(path, bytes)) {
+      _notice('$label 已导出到 $path');
+      return;
+    }
+    final fallback = await DocumentStore.writeToDocuments(name, bytes);
+    if (fallback == null) {
+      _notice('$label 导出失败：没有写入权限');
+      return;
+    }
+    _notice('$label 已保存到 $fallback');
+  }
+
+  Future<void> _importImage() async {
+    final picked = await DocumentStore.pickImage();
+    if (picked == null) return;
+
+    int width;
+    int height;
+    try {
+      final codec = await ui.instantiateImageCodec(picked.bytes);
+      final frame = await codec.getNextFrame();
+      width = frame.image.width;
+      height = frame.image.height;
+      frame.image.dispose();
+      codec.dispose();
+    } catch (_) {
+      _notice('这张图片无法解码：${picked.name}');
+      return;
+    }
+    if (width <= 0 || height <= 0) return;
+
+    const maxSide = 480.0;
+    final scale = math.min(1.0, maxSide / math.max(width, height));
+    final size = Size(width * scale, height * scale);
+    final viewport = _controller.viewport;
+    final center = viewport.size.isEmpty
+        ? Offset.zero
+        : viewport.toWorld(Offset(viewport.size.width / 2, viewport.size.height / 2));
+
+    final element = ImageElement(
+      id: newId('el'),
+      frame: Rect.fromCenter(center: center, width: size.width, height: size.height),
+      bytes: picked.bytes,
+      mimeType: picked.mimeType,
+      label: picked.name,
+    );
+    _controller.addElement(element);
+    ImageRegistry.ensure(element, () {});
+  }
+
+  // ── 文本编辑 ───────────────────────────────────────────────────────────────
+
+  void _beginEditing(WbElement element) {
+    setState(() => _editingId = element.id);
+  }
+
+  void _cancelEditing() {
+    if (_editingId == null) return;
+    setState(() => _editingId = null);
+  }
+
+  void _submitEditing(String text) {
+    final id = _editingId;
+    if (id == null) return;
+    setState(() => _editingId = null);
+    _controller.setTextContent(id, text);
+  }
+
+  // ── 其它动作 ───────────────────────────────────────────────────────────────
+
+  Future<void> _copySelection() async {
+    if (_controller.selection.isEmpty) {
+      _notice('还没有选中任何元素');
+      return;
+    }
+    await _controller.copySelection();
+    _notice('已复制 ${_controller.selection.length} 个元素');
+  }
+
+  Future<void> _cutSelection() async {
+    if (_controller.selection.isEmpty) return;
+    await _controller.cutSelection();
+    _notice('已剪切');
+  }
+
+  Future<void> _paste() async {
+    final count = await _controller.paste();
+    if (count == 0) _notice('剪贴板里没有可粘贴的白板内容');
+  }
+
+  Future<void> _duplicateSelection() async {
+    if (_controller.selection.isEmpty) return;
+    await _controller.duplicateSelection();
+  }
+
+  void _nudge(Offset delta) {
+    if (_controller.selection.isEmpty) return;
+    _controller.nudgeSelection(delta);
+  }
+
+  void _zoomIn() {
+    final viewport = _controller.viewport;
+    if (viewport.size.isEmpty) return;
+    viewport.zoomAt(
+      Offset(viewport.size.width / 2, viewport.size.height / 2),
+      1.25,
+    );
+  }
+
+  void _zoomOut() {
+    final viewport = _controller.viewport;
+    if (viewport.size.isEmpty) return;
+    viewport.zoomAt(
+      Offset(viewport.size.width / 2, viewport.size.height / 2),
+      1 / 1.25,
+    );
+  }
+
+  void _zoomReset() {
+    final viewport = _controller.viewport;
+    if (viewport.size.isEmpty) return;
+    viewport.resetZoom(
+      focus: Offset(viewport.size.width / 2, viewport.size.height / 2),
+    );
+  }
+
+  void _zoomToFit() {
+    final bounds = _controller.contentBounds;
+    if (bounds == null) {
+      _notice('画布上还没有内容');
+      return;
+    }
+    _controller.viewport.fit(bounds);
+  }
+
+  void _notice(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontSize: 13)),
+        behavior: SnackBarBehavior.floating,
+        width: 460,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  WbActions _buildActions() => WbActions(
+        newDocument: _newDocument,
+        openDocument: _openDocument,
+        save: _save,
+        saveAs: _saveAs,
+        exportPng: _exportPng,
+        exportSvg: _exportSvg,
+        importImage: _importImage,
+        renameDocument: _renameDocument,
+        showShortcuts: () => showShortcutsDialog(context),
+        showAbout: () => showAboutWbPro(context),
+        toggleTheme: widget.onToggleTheme,
+        toggleInspector: () => setState(() => _inspectorOpen = !_inspectorOpen),
+        clearCanvas: _clearCanvas,
+        copySelection: _copySelection,
+        cutSelection: _cutSelection,
+        paste: _paste,
+        duplicateSelection: _duplicateSelection,
+        deleteSelection: _controller.deleteSelection,
+        selectAll: _controller.selectAll,
+        undo: _controller.undo,
+        redo: _controller.redo,
+        zoomIn: _zoomIn,
+        zoomOut: _zoomOut,
+        zoomReset: _zoomReset,
+        zoomToFit: _zoomToFit,
+        toggleGrid: () => _controller.setShowGrid(!_controller.showGrid),
+        toggleSnap: () => _controller.setSnapToGrid(!_controller.snapToGrid),
+      );
+
+  // ── 快捷键 ─────────────────────────────────────────────────────────────────
+
+  Map<ShortcutActivator, VoidCallback> _bindings() {
+    final map = <ShortcutActivator, VoidCallback>{};
+
+    void bind(
+      LogicalKeyboardKey key,
+      VoidCallback action, {
+      bool ctrl = false,
+      bool shift = false,
+      bool alt = false,
+    }) {
+      if (ctrl) {
+        map[SingleActivator(key, control: true, shift: shift, alt: alt)] = action;
+        // macOS 上习惯用 Command；两套都注册，用户不用记平台差异。
+        map[SingleActivator(key, meta: true, shift: shift, alt: alt)] = action;
+      } else {
+        map[SingleActivator(key, shift: shift, alt: alt)] = action;
+      }
+    }
+
+    // 工具
+    bind(LogicalKeyboardKey.keyV, () => _controller.setTool(ToolKind.select));
+    bind(LogicalKeyboardKey.keyH, () => _controller.setTool(ToolKind.hand));
+    bind(LogicalKeyboardKey.keyP, () => _controller.setTool(ToolKind.pen));
+    bind(LogicalKeyboardKey.keyE, () => _controller.setTool(ToolKind.eraser));
+    bind(LogicalKeyboardKey.keyR, () => _controller.setTool(ToolKind.rectangle));
+    bind(LogicalKeyboardKey.keyO, () => _controller.setTool(ToolKind.ellipse));
+    bind(LogicalKeyboardKey.keyD, () => _controller.setTool(ToolKind.diamond));
+    bind(LogicalKeyboardKey.keyA, () => _controller.setTool(ToolKind.arrow));
+    bind(LogicalKeyboardKey.keyL, () => _controller.setTool(ToolKind.line));
+    bind(LogicalKeyboardKey.keyT, () => _controller.setTool(ToolKind.text));
+    bind(LogicalKeyboardKey.keyN, () => _controller.setTool(ToolKind.note));
+
+    // 文件
+    bind(LogicalKeyboardKey.keyN, _newDocument, ctrl: true);
+    bind(LogicalKeyboardKey.keyO, _openDocument, ctrl: true);
+    bind(LogicalKeyboardKey.keyS, _save, ctrl: true);
+    bind(LogicalKeyboardKey.keyS, _saveAs, ctrl: true, shift: true);
+    bind(LogicalKeyboardKey.keyE, _exportPng, ctrl: true);
+
+    // 编辑
+    bind(LogicalKeyboardKey.keyZ, _controller.undo, ctrl: true);
+    bind(LogicalKeyboardKey.keyZ, _controller.redo, ctrl: true, shift: true);
+    bind(LogicalKeyboardKey.keyY, _controller.redo, ctrl: true);
+    bind(LogicalKeyboardKey.keyC, _copySelection, ctrl: true);
+    bind(LogicalKeyboardKey.keyX, _cutSelection, ctrl: true);
+    bind(LogicalKeyboardKey.keyV, _paste, ctrl: true);
+    bind(LogicalKeyboardKey.keyD, _duplicateSelection, ctrl: true);
+    bind(LogicalKeyboardKey.keyA, _controller.selectAll, ctrl: true);
+    bind(LogicalKeyboardKey.delete, _controller.deleteSelection);
+    bind(LogicalKeyboardKey.backspace, _controller.deleteSelection);
+
+    bind(LogicalKeyboardKey.bracketRight, _controller.bringForward, ctrl: true);
+    bind(LogicalKeyboardKey.bracketLeft, _controller.sendBackward, ctrl: true);
+    bind(LogicalKeyboardKey.bracketRight, _controller.bringToFront, ctrl: true, shift: true);
+    bind(LogicalKeyboardKey.bracketLeft, _controller.sendToBack, ctrl: true, shift: true);
+
+    // 方向键微移
+    const step = 1.0;
+    const fast = 10.0;
+    bind(LogicalKeyboardKey.arrowLeft, () => _nudge(const Offset(-step, 0)));
+    bind(LogicalKeyboardKey.arrowRight, () => _nudge(const Offset(step, 0)));
+    bind(LogicalKeyboardKey.arrowUp, () => _nudge(const Offset(0, -step)));
+    bind(LogicalKeyboardKey.arrowDown, () => _nudge(const Offset(0, step)));
+    bind(LogicalKeyboardKey.arrowLeft, () => _nudge(const Offset(-fast, 0)), shift: true);
+    bind(LogicalKeyboardKey.arrowRight, () => _nudge(const Offset(fast, 0)), shift: true);
+    bind(LogicalKeyboardKey.arrowUp, () => _nudge(const Offset(0, -fast)), shift: true);
+    bind(LogicalKeyboardKey.arrowDown, () => _nudge(const Offset(0, fast)), shift: true);
+
+    // 视图
+    bind(LogicalKeyboardKey.equal, _zoomIn, ctrl: true);
+    bind(LogicalKeyboardKey.equal, _zoomIn, ctrl: true, shift: true);
+    bind(LogicalKeyboardKey.minus, _zoomOut, ctrl: true);
+    bind(LogicalKeyboardKey.digit0, _zoomReset, ctrl: true);
+    bind(LogicalKeyboardKey.digit1, _zoomToFit, shift: true);
+    bind(LogicalKeyboardKey.keyG, () => _controller.setShowGrid(!_controller.showGrid), ctrl: true);
+    bind(
+      LogicalKeyboardKey.keyG,
+      () => _controller.setSnapToGrid(!_controller.snapToGrid),
+      ctrl: true,
+      shift: true,
+    );
+
+    // 帮助
+    bind(LogicalKeyboardKey.slash, () => showShortcutsDialog(context), shift: true);
+
+    bind(LogicalKeyboardKey.escape, () {
+      _controller.setTool(ToolKind.select);
+      _controller.clearSelection();
+    });
+
+    return map;
+  }
+
+  // ── 布局 ───────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < WbTheme.compactBreakpoint;
+
+    return Scaffold(
+      body: CallbackShortcuts(
+        bindings: _editingId == null
+            ? _bindings()
+            : const <ShortcutActivator, VoidCallback>{},
+        child: Focus(
+          autofocus: true,
+          child: Column(
+            children: <Widget>[
+              TopBar(
+                controller: _controller,
+                actions: _actions,
+                compact: compact,
+                inspectorOpen: _inspectorOpen,
+              ),
+              Expanded(
+                child: Row(
+                  children: <Widget>[
+                    if (!compact) _rail(context),
+                    Expanded(
+                      child: Stack(
+                        children: <Widget>[
+                          Positioned.fill(
+                            child: CanvasView(
+                              controller: _controller,
+                              onEditText: _beginEditing,
+                              onNotice: _notice,
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: AnimatedBuilder(
+                                animation: _controller,
+                                builder: (context, _) => _controller.elements.isEmpty
+                                    ? _emptyHint(context)
+                                    : const SizedBox.shrink(),
+                              ),
+                            ),
+                          ),
+                          if (_recovery != null) _recoveryBanner(context),
+                          if (compact)
+                            Positioned(
+                              left: 10,
+                              right: 10,
+                              bottom: 10,
+                              child: WbPanel(
+                                child: ToolRail(
+                                  controller: _controller,
+                                  onImportImage: _importImage,
+                                  onOpenInspector: _openInspectorSheet,
+                                  horizontal: true,
+                                ),
+                              ),
+                            ),
+                          if (_editingId != null)
+                            TextEditorOverlay(
+                              controller: _controller,
+                              elementId: _editingId!,
+                              onSubmit: _submitEditing,
+                              onCancel: _cancelEditing,
+                            ),
+                          if (_busy)
+                            Positioned.fill(
+                              child: ColoredBox(
+                                color: Colors.black.withValues(alpha: 0.18),
+                                child: const Center(child: CircularProgressIndicator()),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (!compact && _inspectorOpen)
+                      InspectorPanel(
+                        controller: _controller,
+                        onClose: () => setState(() => _inspectorOpen = false),
+                      ),
+                  ],
+                ),
+              ),
+              StatusBar(controller: _controller, actions: _actions, compact: compact),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _rail(BuildContext context) {
+    return Container(
+      width: WbTheme.railWidth,
+      decoration: BoxDecoration(
+        color: WbTheme.panelColor(context),
+        border: Border(right: BorderSide(color: WbTheme.hairline(context))),
+      ),
+      child: ToolRail(controller: _controller, onImportImage: _importImage),
+    );
+  }
+
+  Widget _emptyHint(BuildContext context) {
+    final subtle = WbTheme.subtleText(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(Icons.gesture, size: 44, color: subtle.withValues(alpha: 0.35)),
+          const SizedBox(height: 14),
+          Text(
+            '空白画布',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: subtle.withValues(alpha: 0.75),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '按 P 开始手绘，或从左侧选一个形状工具',
+            style: TextStyle(fontSize: 12.5, color: subtle.withValues(alpha: 0.6)),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              _hintChip(context, '空格 + 拖动', '平移'),
+              const SizedBox(width: 8),
+              _hintChip(context, 'Ctrl + 滚轮', '缩放'),
+              const SizedBox(width: 8),
+              _hintChip(context, '?', '快捷键'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hintChip(BuildContext context, String keys, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: WbTheme.panelColor(context),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: WbTheme.hairline(context)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            keys,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: WbTheme.subtleText(context).withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: WbTheme.subtleText(context).withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _recoveryBanner(BuildContext context) {
+    return Positioned(
+      top: 12,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: WbPanel(
+          padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.restore, size: 15, color: WbTheme.activeColor(context)),
+              const SizedBox(width: 8),
+              Text(
+                '发现 ${_formatAgo(_recoveryAt)}的自动存档',
+                style: const TextStyle(fontSize: 12.5),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () {
+                  final document = _recovery;
+                  if (document == null) return;
+                  _loadDocument(document);
+                  // 恢复出来的内容还没落到用户文件上，标脏让「保存」有意义。
+                  _controller.setDirty(true);
+                  setState(() => _recovery = null);
+                  _notice('已恢复自动存档');
+                },
+                child: const Text('恢复', style: TextStyle(fontSize: 12.5)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 15),
+                tooltip: '忽略',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() => _recovery = null),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatAgo(DateTime? at) {
+    if (at == null) return '刚才';
+    final diff = DateTime.now().difference(at);
+    if (diff.inMinutes < 1) return '刚才';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
+    if (diff.inHours < 24) return '${diff.inHours} 小时前';
+    return '${diff.inDays} 天前';
+  }
+
+  void _openInspectorSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.62,
+        child: InspectorPanel(
+          controller: _controller,
+          embedded: true,
+          onClose: () => Navigator.of(sheetContext).pop(),
+        ),
+      ),
+    );
+  }
+}
+
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _text = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _text.text.trim();
+    if (value.isEmpty) return;
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('重命名白板'),
+      content: SizedBox(
+        width: 320,
+        child: TextField(
+          controller: _text,
+          autofocus: true,
+          maxLength: 60,
+          decoration: const InputDecoration(
+            labelText: '名称',
+            counterText: '',
+          ),
+          onSubmitted: (_) => _submit(),
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('确定')),
+      ],
+    );
+  }
+}

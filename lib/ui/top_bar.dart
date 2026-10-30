@@ -1,0 +1,326 @@
+import 'package:flutter/material.dart';
+
+import '../state/editor_controller.dart';
+import 'actions.dart';
+import 'theme.dart';
+import 'widgets.dart';
+
+/// 顶部栏：品牌、文档名、保存状态、撤销重做、主菜单。
+class TopBar extends StatelessWidget {
+  const TopBar({
+    super.key,
+    required this.controller,
+    required this.actions,
+    required this.compact,
+    this.inspectorOpen = false,
+  });
+
+  final EditorController controller;
+  final WbActions actions;
+  final bool compact;
+  final bool inspectorOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final scheme = Theme.of(context).colorScheme;
+        return Container(
+          height: WbTheme.topBarHeight,
+          decoration: BoxDecoration(
+            color: WbTheme.panelColor(context),
+            border: Border(bottom: BorderSide(color: WbTheme.hairline(context))),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: <Widget>[
+              _logo(context),
+              if (!compact) ...<Widget>[
+                const SizedBox(width: 8),
+                Text(
+                  'wb-pro',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                    color: scheme.onSurface.withValues(alpha: 0.85),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(width: 1, height: 18, color: WbTheme.hairline(context)),
+              ],
+              const SizedBox(width: 10),
+              Flexible(child: _documentTitle(context)),
+              const Spacer(),
+              WbIconButton(
+                icon: Icons.undo,
+                tooltip: '撤销  Ctrl+Z',
+                onPressed: controller.canUndo ? actions.undo : null,
+              ),
+              WbIconButton(
+                icon: Icons.redo,
+                tooltip: '重做  Ctrl+Shift+Z',
+                onPressed: controller.canRedo ? actions.redo : null,
+              ),
+              if (!compact) ...<Widget>[
+                const SizedBox(width: 4),
+                Container(width: 1, height: 18, color: WbTheme.hairline(context)),
+                const SizedBox(width: 4),
+                WbIconButton(
+                  icon: Icons.save_outlined,
+                  tooltip: '保存  Ctrl+S',
+                  onPressed: actions.save,
+                  active: controller.dirty,
+                ),
+                WbIconButton(
+                  icon: Icons.ios_share,
+                  tooltip: '导出 / 导入',
+                  onPressed: () => _showExportSheet(context),
+                ),
+              ],
+              const SizedBox(width: 4),
+              _menu(context),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _logo(BuildContext context) {
+    return Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: <Color>[Color(0xFF4C8DFF), Color(0xFF2F5BFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: const Icon(Icons.gesture, size: 16, color: Colors.white),
+    );
+  }
+
+  Widget _documentTitle(BuildContext context) {
+    final dirty = controller.dirty;
+    return InkWell(
+      onTap: actions.renameDocument,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Flexible(
+              child: Text(
+                controller.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(width: 6),
+            if (dirty)
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: WbTheme.activeColor(context),
+                  shape: BoxShape.circle,
+                ),
+              )
+            else
+              Icon(
+                Icons.check_circle_outline,
+                size: 12,
+                color: WbTheme.subtleText(context).withValues(alpha: 0.6),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _menu(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: '菜单',
+      icon: const Icon(Icons.menu, size: 19),
+      constraints: const BoxConstraints(minWidth: 246),
+      position: PopupMenuPosition.under,
+      onSelected: (value) => _handleMenu(context, value),
+      itemBuilder: (context) => _menuItems(context),
+    );
+  }
+
+  void _handleMenu(BuildContext context, String value) {
+    switch (value) {
+      case 'new':
+        actions.newDocument();
+      case 'open':
+        actions.openDocument();
+      case 'save':
+        actions.save();
+      case 'saveAs':
+        actions.saveAs();
+      case 'png':
+        actions.exportPng();
+      case 'svg':
+        actions.exportSvg();
+      case 'image':
+        actions.importImage();
+      case 'rename':
+        actions.renameDocument();
+      case 'clear':
+        actions.clearCanvas();
+      case 'undo':
+        actions.undo();
+      case 'redo':
+        actions.redo();
+      case 'cut':
+        actions.cutSelection();
+      case 'copy':
+        actions.copySelection();
+      case 'paste':
+        actions.paste();
+      case 'duplicate':
+        actions.duplicateSelection();
+      case 'delete':
+        actions.deleteSelection();
+      case 'selectAll':
+        actions.selectAll();
+      case 'grid':
+        actions.toggleGrid();
+      case 'snap':
+        actions.toggleSnap();
+      case 'inspector':
+        actions.toggleInspector();
+      case 'zoomIn':
+        actions.zoomIn();
+      case 'zoomOut':
+        actions.zoomOut();
+      case 'zoomReset':
+        actions.zoomReset();
+      case 'fit':
+        actions.zoomToFit();
+      case 'theme':
+        actions.toggleTheme();
+      case 'shortcuts':
+        actions.showShortcuts();
+      case 'about':
+        actions.showAbout();
+    }
+  }
+
+  List<PopupMenuEntry<String>> _menuItems(BuildContext context) {
+    final subtle = WbTheme.subtleText(context);
+    PopupMenuItem<String> item(
+      String value,
+      IconData icon,
+      String label, {
+      String? shortcut,
+      bool enabled = true,
+      bool danger = false,
+    }) {
+      final color = enabled
+          ? (danger ? const Color(0xFFE03131) : Theme.of(context).colorScheme.onSurface)
+          : subtle.withValues(alpha: 0.4);
+      return PopupMenuItem<String>(
+        value: value,
+        height: 36,
+        enabled: enabled,
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label, style: TextStyle(fontSize: 13, color: color)),
+            ),
+            if (shortcut != null)
+              Text(shortcut, style: TextStyle(fontSize: 11, color: subtle)),
+          ],
+        ),
+      );
+    }
+
+    final hasSelection = controller.selection.isNotEmpty;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    return <PopupMenuEntry<String>>[
+      item('new', Icons.note_add_outlined, '新建', shortcut: 'Ctrl+N'),
+      item('open', Icons.folder_open_outlined, '打开…', shortcut: 'Ctrl+O'),
+      item('save', Icons.save_outlined, '保存', shortcut: 'Ctrl+S'),
+      item('saveAs', Icons.save_as_outlined, '另存为…', shortcut: 'Ctrl+Shift+S'),
+      const PopupMenuDivider(),
+      item('png', Icons.image_outlined, '导出 PNG…', shortcut: 'Ctrl+E'),
+      item('svg', Icons.timeline, '导出 SVG…'),
+      item('image', Icons.add_photo_alternate_outlined, '插入图片…'),
+      const PopupMenuDivider(),
+      item('undo', Icons.undo, '撤销', shortcut: 'Ctrl+Z', enabled: controller.canUndo),
+      item('redo', Icons.redo, '重做', shortcut: 'Ctrl+Shift+Z', enabled: controller.canRedo),
+      item('cut', Icons.content_cut, '剪切', shortcut: 'Ctrl+X', enabled: hasSelection),
+      item('copy', Icons.content_copy, '复制', shortcut: 'Ctrl+C', enabled: hasSelection),
+      item('paste', Icons.content_paste, '粘贴', shortcut: 'Ctrl+V'),
+      item('duplicate', Icons.copy_all_outlined, '创建副本', shortcut: 'Ctrl+D', enabled: hasSelection),
+      item('delete', Icons.delete_outline, '删除', shortcut: 'Del', enabled: hasSelection, danger: true),
+      item('selectAll', Icons.select_all, '全选', shortcut: 'Ctrl+A'),
+      const PopupMenuDivider(),
+      item('grid', Icons.grid_on, controller.showGrid ? '隐藏网格' : '显示网格', shortcut: 'Ctrl+G'),
+      item('snap', Icons.straighten, controller.snapToGrid ? '关闭吸附' : '吸附到网格', shortcut: 'Ctrl+Shift+G'),
+      item('inspector', Icons.tune, '属性面板', shortcut: 'Ctrl+Alt+P'),
+      item('zoomIn', Icons.zoom_in, '放大', shortcut: 'Ctrl+='),
+      item('zoomOut', Icons.zoom_out, '缩小', shortcut: 'Ctrl+-'),
+      item('zoomReset', Icons.center_focus_strong, '实际大小', shortcut: 'Ctrl+0'),
+      item('fit', Icons.fit_screen_outlined, '适应内容', shortcut: 'Shift+1'),
+      const PopupMenuDivider(),
+      item('theme', dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+          dark ? '浅色主题' : '深色主题'),
+      item('shortcuts', Icons.keyboard_outlined, '快捷键', shortcut: '?'),
+      item('about', Icons.info_outline, '关于 wb-pro'),
+    ];
+  }
+
+  /// 移动端没有顶栏导出按钮，用一个底部弹层代替。
+  void _showExportSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('导出 PNG'),
+              subtitle: const Text('按内容范围渲染，2 倍像素密度'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                actions.exportPng();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.timeline),
+              title: const Text('导出 SVG'),
+              subtitle: const Text('矢量格式，可在 Figma / Illustrator 里编辑'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                actions.exportSvg();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_photo_alternate_outlined),
+              title: const Text('插入图片'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                actions.importImage();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
