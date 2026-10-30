@@ -144,6 +144,15 @@ void main() {
       controller.dispose();
     });
 
+    test('关掉宽松命中后空心形状内部不再算命中', () {
+      final controller = EditorController();
+      controller.addElement(_shape('hollow', size: 200, filled: false));
+      // 橡皮擦用这一档：在空心矩形中间划一下不该把整个矩形删掉
+      expect(controller.hitTest(const Offset(100, 100), loose: false), isNull);
+      expect(controller.hitTest(const Offset(0, 100), loose: false)!.id, 'hollow');
+      controller.dispose();
+    });
+
     test('切换工具会清空选择', () {
       final controller = EditorController();
       controller.addElement(_shape('a'));

@@ -553,7 +553,11 @@ class CanvasViewState extends State<CanvasView> {
   // ── 橡皮 / 双指 ────────────────────────────────────────────────────────────
 
   void _eraseAt(Offset world) {
-    final hit = _controller.hitTest(world, tolerance: 2 / _viewport.zoom + 1);
+    final hit = _controller.hitTest(
+      world,
+      tolerance: 2 / _viewport.zoom + 1,
+      loose: false,
+    );
     if (hit == null) return;
     _controller.updateLive(
       _controller.elements.where((e) => e.id != hit.id).toList(growable: false),

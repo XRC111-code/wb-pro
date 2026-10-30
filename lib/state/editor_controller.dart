@@ -388,11 +388,17 @@ class EditorController extends ChangeNotifier {
   }
 
   /// 从后往前找命中的元素 —— 后画的在上层，点击应该优先选中它。
-  WbElement? hitTest(Offset world, {double tolerance = 4}) {
+  /// 找指针下面的元素。
+  ///
+  /// [loose] 为 true（选择工具的用法）时，精确命中全部落空后会退一步接受
+  /// 「点在元素内部」；橡皮擦要传 false —— 在空心矩形中间划一下就把整个
+  /// 矩形删掉，不是「擦」该有的手感。
+  WbElement? hitTest(Offset world, {double tolerance = 4, bool loose = true}) {
     for (var i = _elements.length - 1; i >= 0; i--) {
       final element = _elements[i];
       if (element.hitTest(world, tolerance: tolerance)) return element;
     }
+    if (!loose) return null;
     // 一圈都没点中边线，再放宽到「点进内部也算」。没有这一遍，空心矩形
     // 只有边框能选中，触摸屏上等于点不到。
     for (var i = _elements.length - 1; i >= 0; i--) {
