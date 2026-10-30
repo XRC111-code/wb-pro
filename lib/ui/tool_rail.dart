@@ -207,12 +207,18 @@ class _ToolRailState extends State<ToolRail> {
         ),
       );
     }
-    return _fadeEdges(
-      context,
-      SingleChildScrollView(
-        controller: _scroll,
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Column(children: children),
+    return Scrollbar(
+      controller: _scroll,
+      thumbVisibility: true,
+      thickness: 2,
+      radius: const Radius.circular(2),
+      child: _fadeEdges(
+        context,
+        SingleChildScrollView(
+          controller: _scroll,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(children: children),
+        ),
       ),
     );
   }
