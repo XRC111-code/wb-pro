@@ -108,7 +108,12 @@ class TextEditorOverlayState extends State<TextEditorOverlay> {
         // 屏幕上 10px 以下的字没法编辑（别说看清光标了），编辑时给个下限，
         // 关掉编辑框后画布上仍然是真实的缩放比例。
         final fontSize = (baseFont * zoom).clamp(10.0, 400.0).toDouble();
-        final width = (screen.width * (isNote ? 1 : 1)).clamp(72.0, 4000.0).toDouble();
+        // 文本框比元素本身宽一点。TextField 除了文字还要放光标，内部行宽
+        // 计算和 TextPainter 差几像素，宽度刚好卡在文字宽度上时会莫名折行——
+        // 双击编辑的瞬间文字突然变成两行，非常刺眼。便签不加，它本来就
+        // 该按固定宽度换行。
+        final width =
+            (screen.width + (isNote ? 0 : 24)).clamp(72.0, 4000.0).toDouble();
 
         return Positioned(
           left: screen.left,
