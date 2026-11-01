@@ -6,7 +6,10 @@ import 'actions.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-/// 顶部栏：品牌、文档名、保存状态、撤销重做、主菜单。
+/// 顶部两角：左边文档名，右边一组动作。
+///
+/// 没有顶栏条。一条 52px 高的实色横条会横贯整个画布上沿，看起来像给窗口
+/// 戴了个帽子；改成两块各自独立的小浮层之后，画布从第一条像素就是画布。
 class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
@@ -24,147 +27,123 @@ class TopBar extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        final scheme = Theme.of(context).colorScheme;
-        return SizedBox(
-          height: WbTheme.topBarHeight,
-          child: MiuixSurface(
-            color: WbTheme.panelColor(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: <Widget>[
-              _logo(context),
-              if (!compact) ...<Widget>[
-                const SizedBox(width: 8),
-                Text(
-                  'wb-pro',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                    color: scheme.onSurface.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(width: 1, height: 18, color: WbTheme.hairline(context)),
-              ],
-              const SizedBox(width: 10),
-              // 不要把文档名做成 Flexible：它会和右边的 Spacer 平分剩余空间，
-              // 结果按钮组被顶到画布中间，属性面板一开更明显。限个最大宽度，
-              // 剩下的空间全交给 Spacer。
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 280),
-                child: _documentTitle(context),
-              ),
-              const Spacer(),
-              WbIconButton(
-                icon: Icons.undo,
-                tooltip: '撤销  Ctrl+Z',
-                onPressed: controller.canUndo ? actions.undo : null,
-              ),
-              WbIconButton(
-                icon: Icons.redo,
-                tooltip: '重做  Ctrl+Shift+Z',
-                onPressed: controller.canRedo ? actions.redo : null,
-              ),
-              if (!compact) ...<Widget>[
-                const SizedBox(width: 4),
-                Container(width: 1, height: 18, color: WbTheme.hairline(context)),
-                const SizedBox(width: 4),
-                WbIconButton(
-                  icon: Icons.save_outlined,
-                  tooltip: '保存  Ctrl+S',
-                  onPressed: actions.save,
-                  active: controller.dirty,
-                ),
-                WbIconButton(
-                  icon: Icons.ios_share,
-                  tooltip: '导出 / 导入',
-                  onPressed: () => _showExportSheet(context),
-                ),
-              ],
-              const SizedBox(width: 4),
-              _menu(context),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(height: 1, color: WbTheme.hairline(context)),
-              ],
+        return Row(
+          children: <Widget>[
+            // 不要用 Flexible：它和后面的 Spacer 都是 flex:1，会平分剩余空间，
+            // 结果动作栏被顶到画布中间。
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: _titleBar(context),
             ),
-          ),
+            const Spacer(),
+            const SizedBox(width: 8),
+            _actionBar(context),
+          ],
         );
       },
     );
   }
 
-  Widget _logo(BuildContext context) {
-    return Container(
-      width: 26,
-      height: 26,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF4C8DFF), Color(0xFF2F5BFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _titleBar(BuildContext context) {
+    final dirty = controller.dirty;
+    return WbFloatingBar(
+      padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
+      // 高度和右边的动作栏对齐：两块浮层同高，顶边才在一条线上。
+      child: SizedBox(
+        height: 36,
+        child: MiuixPressable(
+          onPressed: actions.renameDocument,
+          borderRadius: BorderRadius.circular(6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Flexible(
+                child: Text(
+                  controller.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: WbTheme.onChrome(context),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
+              // 未保存是一个实心点，已保存是一个极淡的勾。两个都用彩色会抢戏，
+              // 但完全没有标记的话，用户不知道关窗口会不会丢东西。
+              if (dirty)
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: WbTheme.activeColor(context),
+                    shape: BoxShape.circle,
+                  ),
+                )
+              else
+                Icon(
+                  Icons.check,
+                  size: 12,
+                  color: WbTheme.onChrome(context, alpha: 0.30),
+                ),
+            ],
+          ),
         ),
-        borderRadius: BorderRadius.circular(7),
       ),
-      child: const Icon(Icons.gesture, size: 16, color: Colors.white),
     );
   }
 
-  Widget _documentTitle(BuildContext context) {
-    final dirty = controller.dirty;
-    return InkWell(
-      onTap: actions.renameDocument,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Flexible(
-              child: Text(
-                controller.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-              ),
+  Widget _actionBar(BuildContext context) {
+    return WbFloatingBar(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          WbIconButton(
+            icon: Icons.undo,
+            tooltip: '撤销  Ctrl+Z',
+            onPressed: controller.canUndo ? actions.undo : null,
+          ),
+          WbIconButton(
+            icon: Icons.redo,
+            tooltip: '重做  Ctrl+Shift+Z',
+            onPressed: controller.canRedo ? actions.redo : null,
+          ),
+          if (!compact) ...<Widget>[
+            _separator(context),
+            WbIconButton(
+              icon: Icons.save_outlined,
+              tooltip: '保存  Ctrl+S',
+              onPressed: actions.save,
+              active: controller.dirty,
             ),
-            const SizedBox(width: 6),
-            if (dirty)
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: WbTheme.activeColor(context),
-                  shape: BoxShape.circle,
-                ),
-              )
-            else
-              Icon(
-                Icons.check_circle_outline,
-                size: 12,
-                color: WbTheme.subtleText(context).withValues(alpha: 0.6),
-              ),
+            WbIconButton(
+              icon: Icons.ios_share,
+              tooltip: '导出 / 导入',
+              onPressed: () => _showExportSheet(context),
+            ),
           ],
-        ),
+          _separator(context),
+          _menu(context),
+        ],
       ),
     );
   }
+
+  Widget _separator(BuildContext context) => Container(
+        width: 1,
+        height: 18,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        color: WbTheme.chromeHairline(context),
+      );
 
   Widget _menu(BuildContext context) {
     return PopupMenuButton<String>(
       tooltip: '菜单',
       icon: MiuixIcon(
         icon: Icons.menu,
-        size: 19,
-        tint: MiuixTheme.of(context).colors.onSurfaceSecondary,
+        size: 18,
+        tint: WbTheme.onChrome(context, alpha: 0.82),
       ),
       constraints: const BoxConstraints(minWidth: 246),
       position: PopupMenuPosition.under,
@@ -243,7 +222,9 @@ class TopBar extends StatelessWidget {
       bool danger = false,
     }) {
       final color = enabled
-          ? (danger ? const Color(0xFFE03131) : Theme.of(context).colorScheme.onSurface)
+          ? (danger
+              ? const Color(0xFFE03131)
+              : Theme.of(context).colorScheme.onSurface)
           : subtle.withValues(alpha: 0.4);
       return PopupMenuItem<String>(
         value: value,
@@ -254,7 +235,8 @@ class TopBar extends StatelessWidget {
             MiuixIcon(icon: icon, size: 16, tint: color),
             const SizedBox(width: 10),
             Expanded(
-              child: MiuixText(label, style: const TextStyle(fontSize: 13), color: color),
+              child: MiuixText(label,
+                  style: const TextStyle(fontSize: 13), color: color),
             ),
             if (shortcut != null)
               MiuixText(
@@ -280,20 +262,28 @@ class TopBar extends StatelessWidget {
       item('svg', Icons.timeline, '导出 SVG…'),
       item('image', Icons.add_photo_alternate_outlined, '插入图片…'),
       const PopupMenuDivider(),
-      item('undo', Icons.undo, '撤销', shortcut: 'Ctrl+Z', enabled: controller.canUndo),
-      item('redo', Icons.redo, '重做', shortcut: 'Ctrl+Shift+Z', enabled: controller.canRedo),
-      item('cut', Icons.content_cut, '剪切', shortcut: 'Ctrl+X', enabled: hasSelection),
-      item('copy', Icons.content_copy, '复制', shortcut: 'Ctrl+C', enabled: hasSelection),
+      item('undo', Icons.undo, '撤销',
+          shortcut: 'Ctrl+Z', enabled: controller.canUndo),
+      item('redo', Icons.redo, '重做',
+          shortcut: 'Ctrl+Shift+Z', enabled: controller.canRedo),
+      item('cut', Icons.content_cut, '剪切',
+          shortcut: 'Ctrl+X', enabled: hasSelection),
+      item('copy', Icons.content_copy, '复制',
+          shortcut: 'Ctrl+C', enabled: hasSelection),
       item('paste', Icons.content_paste, '粘贴', shortcut: 'Ctrl+V'),
-      item('duplicate', Icons.copy_all_outlined, '创建副本', shortcut: 'Ctrl+D', enabled: hasSelection),
-      item('delete', Icons.delete_outline, '删除', shortcut: 'Del', enabled: hasSelection, danger: true),
+      item('duplicate', Icons.copy_all_outlined, '创建副本',
+          shortcut: 'Ctrl+D', enabled: hasSelection),
+      item('delete', Icons.delete_outline, '删除',
+          shortcut: 'Del', enabled: hasSelection, danger: true),
       item('selectAll', Icons.select_all, '全选', shortcut: 'Ctrl+A'),
       const PopupMenuDivider(),
-      item('grid', Icons.grid_on, controller.showGrid ? '隐藏网格' : '显示网格', shortcut: 'Ctrl+G'),
-      item('snap', Icons.straighten, controller.snapToGrid ? '关闭吸附' : '吸附到网格', shortcut: 'Ctrl+Shift+G'),
+      item('grid', Icons.grid_on, controller.showGrid ? '隐藏网格' : '显示网格',
+          shortcut: 'Ctrl+G'),
+      item('snap', Icons.straighten, controller.snapToGrid ? '关闭吸附' : '吸附到网格',
+          shortcut: 'Ctrl+Shift+G'),
       item('inspector', Icons.tune, '属性面板', shortcut: 'Ctrl+Alt+P'),
-      // 放大 / 缩小 / 实际大小 / 适应内容 不放进菜单：状态栏右下角一直摆着
-      // 这几个按钮，菜单再列一遍只会把它顶到屏幕外面去。
+      // 放大 / 缩小 / 实际大小 / 适应内容 不放进菜单：右下角一直摆着这几个
+      // 按钮，菜单再列一遍只会把它顶到屏幕外面去。
       const PopupMenuDivider(),
       item('theme', dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
           dark ? '浅色主题' : '深色主题'),
@@ -302,7 +292,7 @@ class TopBar extends StatelessWidget {
     ];
   }
 
-  /// 移动端没有顶栏导出按钮，用一个底部弹层代替。
+  /// 窄屏没有顶栏导出按钮，用一个底部弹层代替。
   void _showExportSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,

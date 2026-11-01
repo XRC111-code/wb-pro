@@ -692,9 +692,9 @@ class CanvasViewState extends State<CanvasView> {
                   // 画的内容，属于作品本身：浅色主题下画的深色线条，一切到
                   // 深色就整片看不见了。深色模式该变的是外围的工具栏和面板
                   // —— Figma、Miro 都是这个处理方式。
-                  background: WbTheme.canvasLight,
+                  background: WbTheme.canvasColor,
                   gridColor: const Color(0x14000000),
-                  selectionColor: const Color(0xFF2F6BFF),
+                  selectionColor: WbTheme.accent,
                   onImageReady: () {
                     if (mounted) setState(() {});
                   },
@@ -811,11 +811,19 @@ class ScenePainter extends CustomPainter {
             ))
         .toList(growable: false);
 
+    // 框线先垫一道白，再压彩色。白板上任何颜色都可能出现，选中一个深色
+    // 形状时单根细线会陷进去；垫白之后在浅底和深底上都立得住。
+    final haloPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2
+      ..color = Colors.white.withValues(alpha: 0.9);
     final framePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
+      ..strokeWidth = 1.6
       ..color = selectionColor;
-    canvas.drawPath(Path()..addPolygon(corners, true), framePaint);
+    final framePath = Path()..addPolygon(corners, true);
+    canvas.drawPath(framePath, haloPaint);
+    canvas.drawPath(framePath, framePaint);
 
     final handles = <Offset>[
       corners[0],

@@ -116,7 +116,6 @@ class InspectorPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             _header(context, selected.length, hasSelection),
-            const Divider(height: 1),
             _section(
               context,
               enabled: showStroke,
@@ -277,11 +276,7 @@ class InspectorPanel extends StatelessWidget {
         }
         return SizedBox(
           width: WbTheme.inspectorWidth,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: WbTheme.panelColor(context),
-              border: Border(left: BorderSide(color: WbTheme.hairline(context))),
-            ),
+          child: WbPanel(
             child: Scrollbar(
               child: SingleChildScrollView(child: body),
             ),
@@ -337,13 +332,13 @@ class InspectorPanel extends StatelessWidget {
     required String title,
     required Widget child,
   }) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.38,
-      child: IgnorePointer(
-        ignoring: !enabled,
-        child: WbSection(title: title, child: child),
-      ),
-    );
+    // 不适用的分区直接不渲染，而不是灰掉。
+    //
+    // 面板现在是浮层，高度有限：一个灰掉的「字号」要占掉七十多像素，正好把
+    // 下面的对齐按钮挤出可视区。以前是常驻侧栏，高度管够，灰掉能保持布局
+    // 稳定；现在稳定让位给「能不能一眼看全」。
+    if (!enabled) return const SizedBox.shrink();
+    return WbSection(title: title, child: child);
   }
 
   Widget _textStyleSection(BuildContext context, TextElement element) {
@@ -439,8 +434,8 @@ class InspectorPanel extends StatelessWidget {
     return WbSection(
       title: '对齐',
       child: Wrap(
-        spacing: 2,
-        runSpacing: 2,
+        spacing: 1,
+        runSpacing: 1,
         children: <Widget>[
           WbMiniButton(
             icon: Icons.align_horizontal_left,

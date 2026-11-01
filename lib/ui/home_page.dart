@@ -44,7 +44,8 @@ class _HomePageState extends State<HomePage> {
   late final WbActions _actions;
 
   String? _editingId;
-  final GlobalKey<TextEditorOverlayState> _editorKey = GlobalKey<TextEditorOverlayState>();
+  final GlobalKey<TextEditorOverlayState> _editorKey =
+      GlobalKey<TextEditorOverlayState>();
   Timer? _autosaveTimer;
   bool _inspectorOpen = true;
   bool _busy = false;
@@ -134,7 +135,8 @@ class _HomePageState extends State<HomePage> {
     await _openContent(file.content, name: file.name, path: file.path);
   }
 
-  Future<void> _openContent(String content, {required String name, String? path}) async {
+  Future<void> _openContent(String content,
+      {required String name, String? path}) async {
     try {
       final result = WbDocument.decode(content);
       _loadDocument(result.document, path: path);
@@ -229,7 +231,8 @@ class _HomePageState extends State<HomePage> {
             minWidth: 0,
             minHeight: 0,
             cornerRadius: 10,
-            insideMargin: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            insideMargin:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
             textStyle: const TextStyle(fontSize: 14),
           ),
           MiuixButton(
@@ -237,7 +240,8 @@ class _HomePageState extends State<HomePage> {
             minWidth: 0,
             minHeight: 0,
             cornerRadius: 10,
-            insideMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+            insideMargin:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
             colors: danger
                 ? const MiuixButtonColors(
                     color: Color(0xFFE94634),
@@ -271,7 +275,8 @@ class _HomePageState extends State<HomePage> {
     setState(() => _busy = true);
     try {
       final bytes = await exportPng(_controller.elements);
-      await _writeBytesWithFallback(path, bytes, '${_controller.name}.png', 'PNG');
+      await _writeBytesWithFallback(
+          path, bytes, '${_controller.name}.png', 'PNG');
     } catch (error) {
       _notice('导出 PNG 失败：$error');
     } finally {
@@ -350,11 +355,13 @@ class _HomePageState extends State<HomePage> {
     final viewport = _controller.viewport;
     final center = viewport.size.isEmpty
         ? Offset.zero
-        : viewport.toWorld(Offset(viewport.size.width / 2, viewport.size.height / 2));
+        : viewport
+            .toWorld(Offset(viewport.size.width / 2, viewport.size.height / 2));
 
     final element = ImageElement(
       id: newId('el'),
-      frame: Rect.fromCenter(center: center, width: size.width, height: size.height),
+      frame: Rect.fromCenter(
+          center: center, width: size.width, height: size.height),
       bytes: picked.bytes,
       mimeType: picked.mimeType,
       label: picked.name,
@@ -505,7 +512,8 @@ class _HomePageState extends State<HomePage> {
       bool alt = false,
     }) {
       if (ctrl) {
-        map[SingleActivator(key, control: true, shift: shift, alt: alt)] = action;
+        map[SingleActivator(key, control: true, shift: shift, alt: alt)] =
+            action;
         // macOS 上习惯用 Command；两套都注册，用户不用记平台差异。
         map[SingleActivator(key, meta: true, shift: shift, alt: alt)] = action;
       } else {
@@ -518,7 +526,8 @@ class _HomePageState extends State<HomePage> {
     bind(LogicalKeyboardKey.keyH, () => _controller.setTool(ToolKind.hand));
     bind(LogicalKeyboardKey.keyP, () => _controller.setTool(ToolKind.pen));
     bind(LogicalKeyboardKey.keyE, () => _controller.setTool(ToolKind.eraser));
-    bind(LogicalKeyboardKey.keyR, () => _controller.setTool(ToolKind.rectangle));
+    bind(
+        LogicalKeyboardKey.keyR, () => _controller.setTool(ToolKind.rectangle));
     bind(LogicalKeyboardKey.keyO, () => _controller.setTool(ToolKind.ellipse));
     bind(LogicalKeyboardKey.keyD, () => _controller.setTool(ToolKind.diamond));
     bind(LogicalKeyboardKey.keyA, () => _controller.setTool(ToolKind.arrow));
@@ -547,8 +556,10 @@ class _HomePageState extends State<HomePage> {
 
     bind(LogicalKeyboardKey.bracketRight, _controller.bringForward, ctrl: true);
     bind(LogicalKeyboardKey.bracketLeft, _controller.sendBackward, ctrl: true);
-    bind(LogicalKeyboardKey.bracketRight, _controller.bringToFront, ctrl: true, shift: true);
-    bind(LogicalKeyboardKey.bracketLeft, _controller.sendToBack, ctrl: true, shift: true);
+    bind(LogicalKeyboardKey.bracketRight, _controller.bringToFront,
+        ctrl: true, shift: true);
+    bind(LogicalKeyboardKey.bracketLeft, _controller.sendToBack,
+        ctrl: true, shift: true);
 
     // 方向键微移
     const step = 1.0;
@@ -557,10 +568,14 @@ class _HomePageState extends State<HomePage> {
     bind(LogicalKeyboardKey.arrowRight, () => _nudge(const Offset(step, 0)));
     bind(LogicalKeyboardKey.arrowUp, () => _nudge(const Offset(0, -step)));
     bind(LogicalKeyboardKey.arrowDown, () => _nudge(const Offset(0, step)));
-    bind(LogicalKeyboardKey.arrowLeft, () => _nudge(const Offset(-fast, 0)), shift: true);
-    bind(LogicalKeyboardKey.arrowRight, () => _nudge(const Offset(fast, 0)), shift: true);
-    bind(LogicalKeyboardKey.arrowUp, () => _nudge(const Offset(0, -fast)), shift: true);
-    bind(LogicalKeyboardKey.arrowDown, () => _nudge(const Offset(0, fast)), shift: true);
+    bind(LogicalKeyboardKey.arrowLeft, () => _nudge(const Offset(-fast, 0)),
+        shift: true);
+    bind(LogicalKeyboardKey.arrowRight, () => _nudge(const Offset(fast, 0)),
+        shift: true);
+    bind(LogicalKeyboardKey.arrowUp, () => _nudge(const Offset(0, -fast)),
+        shift: true);
+    bind(LogicalKeyboardKey.arrowDown, () => _nudge(const Offset(0, fast)),
+        shift: true);
 
     // 视图
     bind(LogicalKeyboardKey.equal, _zoomIn, ctrl: true);
@@ -568,7 +583,9 @@ class _HomePageState extends State<HomePage> {
     bind(LogicalKeyboardKey.minus, _zoomOut, ctrl: true);
     bind(LogicalKeyboardKey.digit0, _zoomReset, ctrl: true);
     bind(LogicalKeyboardKey.digit1, _zoomToFit, shift: true);
-    bind(LogicalKeyboardKey.keyG, () => _controller.setShowGrid(!_controller.showGrid), ctrl: true);
+    bind(LogicalKeyboardKey.keyG,
+        () => _controller.setShowGrid(!_controller.showGrid),
+        ctrl: true);
     bind(
       LogicalKeyboardKey.keyG,
       () => _controller.setSnapToGrid(!_controller.snapToGrid),
@@ -577,7 +594,8 @@ class _HomePageState extends State<HomePage> {
     );
 
     // 帮助
-    bind(LogicalKeyboardKey.slash, () => showShortcutsDialog(context), shift: true);
+    bind(LogicalKeyboardKey.slash, () => showShortcutsDialog(context),
+        shift: true);
 
     bind(LogicalKeyboardKey.escape, () {
       _controller.setTool(ToolKind.select);
@@ -591,7 +609,12 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < WbTheme.compactBreakpoint;
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < WbTheme.compactBreakpoint;
+
+    // 底部一条线上要并排放三块：左下统计、中间工具条、右下缩放。
+    // 窗口不够宽时不硬挤，把两侧的状态收起来，只留工具条。
+    final roomForFooter = width >= 940;
 
     return Scaffold(
       body: CallbackShortcuts(
@@ -600,130 +623,154 @@ class _HomePageState extends State<HomePage> {
             : const <ShortcutActivator, VoidCallback>{},
         child: Focus(
           autofocus: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              TopBar(
-                controller: _controller,
-                actions: _actions,
-                compact: compact,
-              ),
-              Expanded(
-                child: Row(
-                  children: <Widget>[
-                    if (!compact) _rail(context),
-                    Expanded(
-                      child: Stack(
-                        children: <Widget>[
-                          Positioned.fill(
-                            child: CanvasView(
-                              controller: _controller,
-                              onEditText: _beginEditing,
-                              onNotice: _notice,
-                              ignorePointers: _editingId != null,
-                              onOutsidePointer: () => _editorKey.currentState?.submit(),
-                            ),
-                          ),
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: AnimatedBuilder(
-                                animation: _controller,
-                                builder: (context, _) => _controller.elements.isEmpty
-                                    ? _emptyHint(context)
-                                    : const SizedBox.shrink(),
-                              ),
-                            ),
-                          ),
-                          if (_recovery != null) _recoveryBanner(context),
-                          if (compact)
-                            Positioned(
-                              left: 10,
-                              right: 10,
-                              bottom: 10,
-                              child: WbPanel(
-                                child: ToolRail(
-                                  controller: _controller,
-                                  onImportImage: _importImage,
-                                  onOpenInspector: _openInspectorSheet,
-                                  horizontal: true,
-                                ),
-                              ),
-                            ),
-                          if (_editingId != null)
-                            TextEditorOverlay(
-                              key: _editorKey,
-                              controller: _controller,
-                              elementId: _editingId!,
-                              onSubmit: _submitEditing,
-                              onCancel: _cancelEditing,
-                            ),
-                          if (_busy)
-                            Positioned.fill(
-                              child: ColoredBox(
-                                color: Colors.black.withValues(alpha: 0.18),
-                                child: const Center(child: CircularProgressIndicator()),
-                              ),
-                            ),
-                        ],
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              // 属性面板跟着选中走：选中什么就显示什么，取消选中自动收起。
+              final showInspector = !compact &&
+                  _inspectorOpen &&
+                  _controller.selection.isNotEmpty;
+              return Stack(
+                children: <Widget>[
+                  Positioned.fill(
+                    child: CanvasView(
+                      controller: _controller,
+                      onEditText: _beginEditing,
+                      onNotice: _notice,
+                      ignorePointers: _editingId != null,
+                      onOutsidePointer: () => _editorKey.currentState?.submit(),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: _controller.elements.isEmpty
+                          ? _emptyHint(context)
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                  if (_recovery != null) _recoveryBanner(context),
+
+                  // 顶部两角
+                  Positioned(
+                    top: WbTheme.inset,
+                    left: WbTheme.inset,
+                    right: WbTheme.inset,
+                    child: TopBar(
+                      controller: _controller,
+                      actions: _actions,
+                      compact: compact,
+                    ),
+                  ),
+
+                  // 属性面板：浮在右侧，不推挤画布
+                  if (showInspector)
+                    Positioned(
+                      top: 72,
+                      right: WbTheme.inset,
+                      // 高度跟着内容走，只在超出可视区时才截断并滚动。写死
+                      // bottom 会让分区少的元素（比如一张图片）也撑成满屏。
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight:
+                              MediaQuery.sizeOf(context).height - 72 - 68,
+                        ),
+                        child: InspectorPanel(
+                          controller: _controller,
+                          onClose: () => setState(() => _inspectorOpen = false),
+                        ),
                       ),
                     ),
-                    if (!compact && _inspectorOpen)
-                      InspectorPanel(
+
+                  // 底部
+                  if (roomForFooter)
+                    Positioned(
+                      left: WbTheme.inset,
+                      right: WbTheme.inset,
+                      bottom: WbTheme.inset,
+                      child: StatusBar(
                         controller: _controller,
-                        onClose: () => setState(() => _inspectorOpen = false),
+                        actions: _actions,
+                        compact: compact,
                       ),
-                  ],
-                ),
-              ),
-              StatusBar(controller: _controller, actions: _actions, compact: compact),
-            ],
+                    ),
+                  // 工具条放最后：万一和两侧状态在窄窗口下碰上了，压在下面
+                  // 的应该是文字而不是按钮。
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: WbTheme.inset,
+                    child: Center(
+                      child: ToolRail(
+                        controller: _controller,
+                        onImportImage: _importImage,
+                        inspectorOpen: showInspector,
+                        onOpenInspector: () {
+                          if (compact) {
+                            _openInspectorSheet();
+                          } else {
+                            setState(() => _inspectorOpen = !_inspectorOpen);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+
+                  if (_editingId != null)
+                    TextEditorOverlay(
+                      key: _editorKey,
+                      controller: _controller,
+                      elementId: _editingId!,
+                      onSubmit: _submitEditing,
+                      onCancel: _cancelEditing,
+                    ),
+                  if (_busy)
+                    Positioned.fill(
+                      child: ColoredBox(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _rail(BuildContext context) {
-    return Container(
-      width: WbTheme.railWidth,
-      decoration: BoxDecoration(
-        color: WbTheme.panelColor(context),
-        border: Border(right: BorderSide(color: WbTheme.hairline(context))),
-      ),
-      child: ToolRail(controller: _controller, onImportImage: _importImage),
-    );
-  }
-
   Widget _emptyHint(BuildContext context) {
-    final subtle = WbTheme.subtleText(context);
+    // 画布永远是浅色，提示色就不能取 chrome 的「次要文字」——那套颜色跟着
+    // 主题走，深色模式下是浅灰，摆在白纸上看不见。
+    const ink = Color(0xFF1F2933);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(Icons.gesture, size: 44, color: subtle.withValues(alpha: 0.35)),
-          const SizedBox(height: 14),
+          Icon(Icons.gesture, size: 40, color: ink.withValues(alpha: 0.16)),
+          const SizedBox(height: 12),
           Text(
             '空白画布',
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 14.5,
               fontWeight: FontWeight.w600,
-              color: subtle.withValues(alpha: 0.75),
+              color: ink.withValues(alpha: 0.48),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
-            '按 P 开始手绘，或从左侧选一个形状工具',
-            style: TextStyle(fontSize: 12.5, color: subtle.withValues(alpha: 0.6)),
+            '按 P 开始手绘，或从下方选一个形状工具',
+            style: TextStyle(fontSize: 12, color: ink.withValues(alpha: 0.34)),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              _hintChip(context, '空格 + 拖动', '平移'),
+              _hintChip('空格 + 拖动', '平移'),
               const SizedBox(width: 8),
-              _hintChip(context, 'Ctrl + 滚轮', '缩放'),
+              _hintChip('Ctrl + 滚轮', '缩放'),
               const SizedBox(width: 8),
-              _hintChip(context, '?', '快捷键'),
+              _hintChip('?', '快捷键'),
             ],
           ),
         ],
@@ -731,13 +778,14 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _hintChip(BuildContext context, String keys, String label) {
+  Widget _hintChip(String keys, String label) {
+    const ink = Color(0xFF1F2933);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: WbTheme.panelColor(context),
+        color: Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: WbTheme.hairline(context)),
+        border: Border.all(color: ink.withValues(alpha: 0.10)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -747,16 +795,13 @@ class _HomePageState extends State<HomePage> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: WbTheme.subtleText(context).withValues(alpha: 0.85),
+              color: ink.withValues(alpha: 0.55),
             ),
           ),
           const SizedBox(width: 5),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 11,
-              color: WbTheme.subtleText(context).withValues(alpha: 0.6),
-            ),
+            style: TextStyle(fontSize: 11, color: ink.withValues(alpha: 0.36)),
           ),
         ],
       ),
@@ -799,7 +844,8 @@ class _HomePageState extends State<HomePage> {
                 minWidth: 0,
                 minHeight: 0,
                 cornerRadius: 8,
-                insideMargin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                insideMargin:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 textStyle: const TextStyle(fontSize: 12.5),
               ),
               const SizedBox(width: 2),
@@ -853,7 +899,8 @@ class _RenameDialog extends StatefulWidget {
 }
 
 class _RenameDialogState extends State<_RenameDialog> {
-  late final TextEditingController _text = TextEditingController(text: widget.initial);
+  late final TextEditingController _text =
+      TextEditingController(text: widget.initial);
 
   @override
   void dispose() {

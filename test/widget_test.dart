@@ -32,9 +32,9 @@ void main() {
   testWidgets('空画布显示引导与工具栏', (tester) async {
     await _pumpApp(tester);
 
-    expect(find.text('wb-pro'), findsOneWidget);
+    expect(find.text('未命名白板'), findsOneWidget);
     expect(find.text('空白画布'), findsOneWidget);
-    expect(find.byType(WbToolButton), findsNWidgets(12));
+    expect(find.byType(WbToolButton), findsNWidgets(13));
     expect(find.text('0 个元素'), findsOneWidget);
   });
 
@@ -105,9 +105,23 @@ void main() {
     expect(find.text('另存为…'), findsOneWidget);
   });
 
-  testWidgets('属性面板在无选中时显示默认样式', (tester) async {
+  testWidgets('选中元素后才出现属性面板', (tester) async {
     await _pumpApp(tester);
-    expect(find.text('默认样式'), findsOneWidget);
+
+    // 没选中任何东西时面板不占画布——它现在是浮层，常驻会白白压掉右侧。
+    expect(find.text('样式'), findsNothing);
+
+    await tester.tap(_toolButton('矩形  R'));
+    await tester.pumpAndSettle();
+    await tester.dragFrom(const Offset(400, 300), const Offset(180, 120));
+    await tester.pumpAndSettle();
+
+    await tester.tap(_toolButton('选择  V'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(490, 360));
+    await tester.pumpAndSettle();
+
+    expect(find.text('样式'), findsOneWidget);
     expect(find.text('描边'), findsOneWidget);
     expect(find.text('填充'), findsOneWidget);
   });

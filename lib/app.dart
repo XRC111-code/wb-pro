@@ -12,7 +12,7 @@ class WbApp extends StatefulWidget {
 }
 
 class _WbAppState extends State<WbApp> {
-  ThemeMode _mode = ThemeMode.light;
+  ThemeMode _mode = ThemeMode.dark;
 
   void _toggleTheme() {
     setState(() {

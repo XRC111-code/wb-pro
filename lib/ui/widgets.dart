@@ -19,7 +19,36 @@ Widget _tip({required String message, required Widget child}) {
   );
 }
 
+/// 浮在画布上的一小块：圆角、底色、极淡描边、轻阴影。
+///
+/// 整个界面没有顶栏条和状态栏条，所有 chrome 都是这个形状的浮层。参数少是
+/// 故意的——一旦允许每个地方自己调圆角和阴影，界面就会散。
+class WbFloatingBar extends StatelessWidget {
+  const WbFloatingBar({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(6),
+    this.radius = WbTheme.radius,
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: WbTheme.chromeDecoration(context, radius: radius),
+      padding: padding,
+      child: child,
+    );
+  }
+}
+
 /// 工具栏 / 顶栏上的图标按钮。
+///
+/// 常态完全透明，悬停才浮出一层淡底。浮动控件上如果每个按钮都画个方块，
+/// 一条工具条会变成九宫格。
 class WbIconButton extends StatelessWidget {
   const WbIconButton({
     super.key,
@@ -27,8 +56,8 @@ class WbIconButton extends StatelessWidget {
     required this.tooltip,
     this.onPressed,
     this.active = false,
-    this.size = 34,
-    this.iconSize = 18,
+    this.size = 30,
+    this.iconSize = 17,
     this.color,
   });
 
@@ -45,17 +74,15 @@ class WbIconButton extends StatelessWidget {
     final accent = WbTheme.activeColor(context);
     final enabled = onPressed != null;
     final foreground = color ??
-        (!enabled
-            ? MiuixTheme.of(context).colors.disabledOnSurface
-            : active
-                ? accent
-                : MiuixTheme.of(context).colors.onSurfaceSecondary);
+        (enabled
+            ? (active ? accent : WbTheme.onChrome(context, alpha: 0.90))
+            : WbTheme.onChrome(context, alpha: 0.28));
     return _tip(
       message: tooltip,
       child: MiuixIconButton(
         onPressed: onPressed,
         enabled: enabled,
-        backgroundColor: active ? accent.withValues(alpha: 0.12) : null,
+        backgroundColor: active ? accent.withValues(alpha: 0.14) : null,
         cornerRadius: WbTheme.radiusSmall,
         minWidth: size,
         minHeight: size,
@@ -65,7 +92,7 @@ class WbIconButton extends StatelessWidget {
   }
 }
 
-/// 左侧工具栏里的工具按钮。比顶栏按钮大一圈，选中时是实心强调色。
+/// 工具条里的工具按钮。选中时是一块实心强调色，其余状态只有图标。
 class WbToolButton extends StatelessWidget {
   const WbToolButton({
     super.key,
@@ -86,19 +113,19 @@ class WbToolButton extends StatelessWidget {
     return _tip(
       message: label,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 1),
         child: MiuixIconButton(
           onPressed: onTap,
           backgroundColor: selected ? accent : null,
-          cornerRadius: 12,
-          minWidth: 40,
-          minHeight: 38,
+          cornerRadius: 8,
+          minWidth: 36,
+          minHeight: 36,
           child: MiuixIcon(
             icon: icon,
             size: 19,
             tint: selected
                 ? Colors.white
-                : MiuixTheme.of(context).colors.onSurfaceSecondary,
+                : WbTheme.onChrome(context, alpha: 0.78),
           ),
         ),
       ),
@@ -122,21 +149,26 @@ class WbSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+      padding: const EdgeInsets.fromLTRB(14, 7, 14, 7),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Row(
             children: <Widget>[
-              MiuixSmallTitle(
+              Text(
                 title,
-                textColor: WbTheme.subtleText(context),
-                insideMargin: const EdgeInsets.symmetric(vertical: 6),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.2,
+                  color: WbTheme.subtleText(context),
+                ),
               ),
               const Spacer(),
               if (trailing != null) trailing!,
             ],
           ),
+          const SizedBox(height: 7),
           child,
         ],
       ),
@@ -173,8 +205,7 @@ class WbColorGrid extends StatelessWidget {
         // 7+5，第二行孤零零挂五个，看着像忘了摆整齐。列数按色板总数挑能整除的。
         final columns = _columnsFor(count);
         const gap = 4.0;
-        final slot =
-            (constraints.maxWidth - gap * (columns - 1)) / columns;
+        final slot = (constraints.maxWidth - gap * (columns - 1)) / columns;
         final dot = (slot - 6).clamp(14.0, dotSize).toDouble();
         return Wrap(
           spacing: gap,
@@ -195,8 +226,8 @@ class WbColorGrid extends StatelessWidget {
                 size: dot,
                 slot: slot,
                 color: color,
-                selected:
-                    selected != null && selected!.toARGB32() == color.toARGB32(),
+                selected: selected != null &&
+                    selected!.toARGB32() == color.toARGB32(),
                 accent: accent,
                 onTap: () => onSelected(color),
               ),
@@ -319,15 +350,17 @@ class WbSegmented<T> extends StatelessWidget {
         tabs: <String>[for (final o in options) o.label],
         selectedTabIndex: index < 0 ? 0 : index,
         onTabSelected: (i) => onChanged(options[i].value),
-        height: 32,
-        cornerRadius: 9,
+        height: 30,
+        cornerRadius: 8,
         itemSpacing: 3,
         minWidth: 0,
         maxWidth: double.infinity,
         colors: MiuixTabRowColors(
-          backgroundColor: dark ? const Color(0xFF262A31) : const Color(0xFFEFF1F4),
+          backgroundColor:
+              dark ? const Color(0xFF2C2E34) : const Color(0xFFF0F1F4),
           contentColor: WbTheme.subtleText(context),
-          selectedBackgroundColor: dark ? const Color(0xFF3A3F47) : Colors.white,
+          selectedBackgroundColor:
+              dark ? const Color(0xFF3C3F46) : Colors.white,
           selectedContentColor: accent,
         ),
       );
@@ -339,11 +372,11 @@ class WbSegmented<T> extends StatelessWidget {
     final accent = WbTheme.activeColor(context);
     final dark = MiuixTheme.of(context).brightness == Brightness.dark;
     return Container(
-      height: 32,
+      height: 30,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF262A31) : const Color(0xFFEFF1F4),
-        borderRadius: BorderRadius.circular(9),
+        color: dark ? const Color(0xFF2C2E34) : const Color(0xFFF0F1F4),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: <Widget>[
@@ -351,15 +384,15 @@ class WbSegmented<T> extends StatelessWidget {
             Expanded(
               child: MiuixPressable(
                 onPressed: () => onChanged(options[i].value),
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(6),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 140),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: i == index
-                        ? (dark ? const Color(0xFF3A3F47) : Colors.white)
+                        ? (dark ? const Color(0xFF3C3F46) : Colors.white)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(7),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: MiuixIcon(
                     icon: options[i].icon!,
@@ -414,10 +447,7 @@ class WbSliderRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: <Widget>[
-          SizedBox(
-            width: 42,
-            child: Text(label, style: labelStyle),
-          ),
+          SizedBox(width: 42, child: Text(label, style: labelStyle)),
           Expanded(
             // miuix 的滑块没有 onChangeStart，用 Listener 在按下时补一个；
             // 结束信号它自带（onValueChangeFinished）。
@@ -448,7 +478,7 @@ class WbSliderRow extends StatelessWidget {
   }
 }
 
-/// 浮在画布上的圆角面板。
+/// 浮在画布上的圆角面板（属性面板）。
 class WbPanel extends StatelessWidget {
   const WbPanel({
     super.key,
@@ -463,15 +493,13 @@ class WbPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: width,
+      decoration: WbTheme.chromeDecoration(context),
+      padding: padding,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(WbTheme.radius),
-        child: MiuixSurface(
-          cornerRadius: WbTheme.radius,
-          shadowElevation: 10,
-          child: Padding(padding: padding, child: child),
-        ),
+        child: child,
       ),
     );
   }
@@ -499,8 +527,8 @@ class WbMiniButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       active: active,
-      size: 30,
-      iconSize: 16,
+      size: 26,
+      iconSize: 15,
     );
   }
 }

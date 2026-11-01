@@ -8,28 +8,37 @@ import '../model/text_metrics.dart';
 /// 单独抽一层而不是散落在各个 widget 里：白板的「浮层 + 画布」结构里，
 /// 面板圆角、阴影、间距一旦不一致，看起来就像三个不同的人拼出来的。
 ///
-/// 配色与控件语言来自 miuix（HyperOS 风格）：圆角更大、描边更淡、按压有
-/// 回弹。Material 只保留作底层（Navigator / Overlay / TextField 这些还没有
-/// 对等实现的部件）。
+/// 布局语言是「无框」：没有顶栏条、没有状态栏条、没有分隔线。所有控件都是
+/// 浮在画布上的一小块，靠间距和阴影分层。占位越少，画布越大。
 class WbTheme {
   const WbTheme._();
 
   /// 界面字体。HarmonyOS Sans SC 随包内置，见 pubspec 的 fonts 段。
   static const String fontFamily = kWbFontFamily;
 
-  static const Color accent = Color(0xFF2F6BFF);
-  static const Color accentDark = Color(0xFF7AA2FF);
-  static const Color canvasLight = Color(0xFFF7F7F8);
+  /// 强调色。选绿而不是蓝：白板里蓝色和「链接 / 选中框」撞得太厉害，
+  /// 绿色只出现在「当前状态」上，一眼就能定位。
+  static const Color accent = Color(0xFF00BE6E);
+  static const Color accentDark = Color(0xFF2FD98A);
 
-  static const double railWidth = 52;
-  static const double inspectorWidth = 268;
-  static const double topBarHeight = 52;
-  static const double statusBarHeight = 26;
-  static const double radius = 16;
-  static const double radiusSmall = 10;
+  /// 画布底色。固定浅色，不跟随主题。
+  ///
+  /// 白板上画的是用户的内容，颜色是绝对值。画布一变深，浅色主题下画的深色
+  /// 线条就整片消失。深色模式只该改变外围的 chrome。
+  static const Color canvasColor = Color(0xFFFAFAFA);
 
-  /// 低于这个宽度就切成「手机布局」：工具条挪到底部、属性面板改成弹出层。
-  static const double compactBreakpoint = 860;
+  static const double inspectorWidth = 272;
+  static const double radius = 12;
+  static const double radiusSmall = 9;
+
+  /// 浮动控件距离窗口边缘的留白。
+  static const double inset = 12;
+
+  /// 工具条高度。按钮 34 + 上下内边距 5。
+  static const double barHeight = 44;
+
+  /// 低于这个宽度就切成「紧凑布局」：文档名收起，属性面板改成底部弹层。
+  static const double compactBreakpoint = 780;
 
   // ---------------------------------------------------------------------------
   // miuix 主题
@@ -43,17 +52,17 @@ class WbTheme {
     return base.copy(
       primary: dark ? accentDark : accent,
       primaryVariant: dark ? accentDark : accent,
-      tertiaryContainer: dark ? const Color(0xFF1F2C47) : const Color(0xFFEAF1FF),
+      tertiaryContainer: dark ? const Color(0xFF16342A) : const Color(0xFFE6F9F0),
       onTertiaryContainer: dark ? accentDark : accent,
-      background: dark ? const Color(0xFF111318) : Colors.white,
+      background: dark ? const Color(0xFF18191C) : const Color(0xFFF2F2F4),
       // surface 是窗口底色，容器的底色由 surfaceContainer 给。
-      surface: dark ? const Color(0xFF16181D) : canvasLight,
-      surfaceVariant: dark ? const Color(0xFF1E2128) : Colors.white,
-      surfaceContainer: dark ? const Color(0xFF1E2128) : Colors.white,
-      onSurfaceContainer: dark ? const Color(0xFFE8E8E8) : Colors.black,
-      surfaceContainerHigh: dark ? const Color(0xFF262A31) : const Color(0xFFEFF1F4),
-      outline: dark ? const Color(0xFF3A3F47) : const Color(0xFFDDE1E6),
-      dividerLine: dark ? const Color(0xFF33383F) : const Color(0xFFE6E9ED),
+      surface: dark ? const Color(0xFF1C1D21) : Colors.white,
+      surfaceVariant: dark ? const Color(0xFF24262B) : Colors.white,
+      surfaceContainer: dark ? const Color(0xFF24262B) : Colors.white,
+      onSurfaceContainer: dark ? const Color(0xFFEDEEF0) : const Color(0xFF16181C),
+      surfaceContainerHigh: dark ? const Color(0xFF2E3036) : const Color(0xFFEEEFF2),
+      outline: dark ? const Color(0xFF34373D) : const Color(0xFFE3E5E9),
+      dividerLine: dark ? const Color(0xFF303338) : const Color(0xFFE9EBEE),
     );
   }
 
@@ -143,7 +152,7 @@ class WbTheme {
         backgroundColor: miuix.surfaceContainer,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(20),
         ),
         titleTextStyle: TextStyle(
           fontFamily: fontFamily,
@@ -168,7 +177,7 @@ class WbTheme {
       popupMenuTheme: PopupMenuThemeData(
         color: miuix.surfaceContainer,
         surfaceTintColor: Colors.transparent,
-        elevation: 8,
+        elevation: 10,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
@@ -194,19 +203,53 @@ class WbTheme {
     );
   }
 
-  /// 浮层面板统一的背景 + 边框 + 阴影。
-  static BoxDecoration panelDecoration(BuildContext context, {double radius = radius}) {
-    final c = MiuixTheme.of(context).colors;
+  // ---------------------------------------------------------------------------
+  // 浮层
+  // ---------------------------------------------------------------------------
+
+  /// 浮动控件的底色。深色下比画布亮一档，浅色下是纯白。
+  ///
+  /// 不做半透明 + 模糊：工具条压在内容上，模糊会让底下的线条糊成一片，
+  /// 反而看不清自己画到哪了。实色 + 一圈极淡的描边更干净。
+  static Color chrome(BuildContext context) {
+    final dark = MiuixTheme.of(context).brightness == Brightness.dark;
+    return dark ? const Color(0xFF24262B) : Colors.white;
+  }
+
+  /// 浮动控件上的图标与文字。
+  static Color onChrome(BuildContext context, {double alpha = 1}) {
+    final dark = MiuixTheme.of(context).brightness == Brightness.dark;
+    final base = dark ? const Color(0xFFE7E8EC) : const Color(0xFF33363C);
+    return alpha >= 1 ? base : base.withValues(alpha: alpha);
+  }
+
+  /// 浮动控件之间、控件内部的分隔线。比描边还淡，只是「提一下」。
+  static Color chromeHairline(BuildContext context) {
+    final dark = MiuixTheme.of(context).brightness == Brightness.dark;
+    return dark
+        ? Colors.white.withValues(alpha: 0.09)
+        : Colors.black.withValues(alpha: 0.08);
+  }
+
+  /// 浮动控件的统一装饰：圆角 + 底色 + 一道描边 + 轻阴影。
+  static BoxDecoration chromeDecoration(
+    BuildContext context, {
+    double radius = WbTheme.radius,
+  }) {
     final dark = MiuixTheme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
-      color: c.surfaceContainer,
+      color: chrome(context),
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: c.outline.withValues(alpha: 0.75)),
+      border: Border.all(
+        color: dark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.06),
+      ),
       boxShadow: <BoxShadow>[
         BoxShadow(
-          color: Colors.black.withValues(alpha: dark ? 0.38 : 0.06),
-          blurRadius: 22,
-          offset: const Offset(0, 8),
+          color: Colors.black.withValues(alpha: dark ? 0.22 : 0.07),
+          blurRadius: 16,
+          offset: const Offset(0, 5),
         ),
       ],
     );
@@ -246,7 +289,6 @@ const List<Color> kStrokePalette = <Color>[
 
 const List<Color> kFillPalette = <Color>[
   Color(0xFFFFFFFF),
-  Color(0xFFF1F3F5),
   Color(0xFFFFE3E3),
   Color(0xFFFFF0D9),
   Color(0xFFFFF9DB),

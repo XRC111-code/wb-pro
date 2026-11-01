@@ -26,40 +26,91 @@ class ToolDescriptor {
 }
 
 const List<ToolDescriptor> kTools = <ToolDescriptor>[
-  ToolDescriptor(kind: ToolKind.select, icon: Icons.near_me_outlined, label: '选择', shortcut: 'V'),
-  ToolDescriptor(kind: ToolKind.hand, icon: Icons.pan_tool_outlined, label: '抓手', shortcut: 'H'),
-  ToolDescriptor(kind: ToolKind.pen, icon: Icons.gesture, label: '画笔', shortcut: 'P', group: 1),
-  ToolDescriptor(kind: ToolKind.eraser, icon: Icons.auto_fix_normal_outlined, label: '橡皮', shortcut: 'E', group: 1),
-  ToolDescriptor(kind: ToolKind.rectangle, icon: Icons.crop_square, label: '矩形', shortcut: 'R', group: 2),
-  ToolDescriptor(kind: ToolKind.ellipse, icon: Icons.circle_outlined, label: '椭圆', shortcut: 'O', group: 2),
-  ToolDescriptor(kind: ToolKind.diamond, icon: Icons.change_history, label: '菱形', shortcut: 'D', group: 2),
-  ToolDescriptor(kind: ToolKind.arrow, icon: Icons.arrow_right_alt, label: '箭头', shortcut: 'A', group: 2),
-  ToolDescriptor(kind: ToolKind.line, icon: Icons.horizontal_rule, label: '直线', shortcut: 'L', group: 2),
-  ToolDescriptor(kind: ToolKind.text, icon: Icons.title, label: '文本', shortcut: 'T', group: 3),
-  ToolDescriptor(kind: ToolKind.note, icon: Icons.sticky_note_2_outlined, label: '便签', shortcut: 'N', group: 3),
+  ToolDescriptor(
+      kind: ToolKind.select,
+      icon: Icons.near_me_outlined,
+      label: '选择',
+      shortcut: 'V'),
+  ToolDescriptor(
+      kind: ToolKind.hand,
+      icon: Icons.pan_tool_outlined,
+      label: '抓手',
+      shortcut: 'H'),
+  ToolDescriptor(
+      kind: ToolKind.pen,
+      icon: Icons.gesture,
+      label: '画笔',
+      shortcut: 'P',
+      group: 1),
+  ToolDescriptor(
+      kind: ToolKind.eraser,
+      icon: Icons.auto_fix_normal_outlined,
+      label: '橡皮',
+      shortcut: 'E',
+      group: 1),
+  ToolDescriptor(
+      kind: ToolKind.rectangle,
+      icon: Icons.crop_square,
+      label: '矩形',
+      shortcut: 'R',
+      group: 2),
+  ToolDescriptor(
+      kind: ToolKind.ellipse,
+      icon: Icons.circle_outlined,
+      label: '椭圆',
+      shortcut: 'O',
+      group: 2),
+  ToolDescriptor(
+      kind: ToolKind.diamond,
+      icon: Icons.change_history,
+      label: '菱形',
+      shortcut: 'D',
+      group: 2),
+  ToolDescriptor(
+      kind: ToolKind.arrow,
+      icon: Icons.arrow_right_alt,
+      label: '箭头',
+      shortcut: 'A',
+      group: 2),
+  ToolDescriptor(
+      kind: ToolKind.line,
+      icon: Icons.horizontal_rule,
+      label: '直线',
+      shortcut: 'L',
+      group: 2),
+  ToolDescriptor(
+      kind: ToolKind.text,
+      icon: Icons.title,
+      label: '文本',
+      shortcut: 'T',
+      group: 3),
+  ToolDescriptor(
+      kind: ToolKind.note,
+      icon: Icons.sticky_note_2_outlined,
+      label: '便签',
+      shortcut: 'N',
+      group: 3),
 ];
 
-/// 左侧竖排工具栏（移动端会横过来放到底部）。
+/// 底部居中的一条工具条。
 ///
-/// 两处窄屏细节值得说明：工具一多就必然要滚动，而「能滚」这件事在触屏上
-/// 完全没有提示，用户会以为只有眼前这几个工具。所以两端做了随滚动位置变化
-/// 的渐隐，看到边缘被削掉一半的图标就知道还能滑。「样式」按钮则固定在最右，
-/// 不参与滚动 —— 否则手机上想改颜色得先滑到底，路径太长。
+/// 桌面端也不放左侧竖排：竖排会吃掉 52px 的画布宽度，而它只是一排图标。
+/// 横条压在画布下沿，鼠标移动距离更短，窄屏也不用来回换布局。
 class ToolRail extends StatefulWidget {
   const ToolRail({
     super.key,
     required this.controller,
     required this.onImportImage,
     this.onOpenInspector,
-    this.horizontal = false,
+    this.inspectorOpen = false,
   });
 
   final EditorController controller;
   final VoidCallback onImportImage;
 
-  /// 非空时在末尾追加一个「样式」按钮（移动端没有常驻的属性面板）。
+  /// 非空时在末尾追加「样式」按钮。
   final VoidCallback? onOpenInspector;
-  final bool horizontal;
+  final bool inspectorOpen;
 
   @override
   State<ToolRail> createState() => _ToolRailState();
@@ -70,11 +121,8 @@ class _ToolRailState extends State<ToolRail> {
 
   bool _atStart = true;
 
-  /// 先假设「右边还有东西」，布局完再校正。
-  ///
-  /// 反过来（初始 true、量完再改）会让首帧直接走「两端都贴边」的捷径，
-  /// 之后再想变成渐隐就得等一次完整重建；而首帧本来就在窗口还没显示时，
-  /// 提前画一帧渐隐用户看不见，代价为零。
+  /// 先假设「右边还有东西」，布局完再校正。反过来会让首帧直接走「两端都
+  /// 贴边」的捷径，之后再想变成渐隐就得等一次完整重建。
   bool _atEnd = false;
   bool _syncScheduled = false;
 
@@ -119,7 +167,7 @@ class _ToolRailState extends State<ToolRail> {
     var lastGroup = -1;
     for (final tool in kTools) {
       if (lastGroup != -1 && tool.group != lastGroup) {
-        children.add(_gap(context));
+        children.add(_separator(context));
       }
       lastGroup = tool.group;
       children.add(
@@ -131,7 +179,7 @@ class _ToolRailState extends State<ToolRail> {
         ),
       );
     }
-    children.add(_gap(context));
+    children.add(_separator(context));
     children.add(
       WbToolButton(
         icon: Icons.image_outlined,
@@ -140,107 +188,68 @@ class _ToolRailState extends State<ToolRail> {
         onTap: widget.onImportImage,
       ),
     );
+    if (widget.onOpenInspector != null) {
+      children.add(
+        WbToolButton(
+          icon: Icons.tune,
+          label: '样式  Ctrl+Alt+P',
+          selected: widget.inspectorOpen,
+          onTap: widget.onOpenInspector!,
+        ),
+      );
+    }
     return children;
   }
 
   @override
   Widget build(BuildContext context) {
+    _scheduleSync();
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
-        return widget.horizontal ? _horizontal(context) : _vertical(context);
+        return WbFloatingBar(
+          child: ConstrainedBox(
+            // 内容超出就横向滚动，此时两端渐隐提示还有没看全的工具。
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: true,
+              thickness: 2,
+              radius: const Radius.circular(2),
+              child: SingleChildScrollView(
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                child: _fadeEdges(
+                  context,
+                  Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _items(context)),
+                ),
+              ),
+            ),
+          ),
+        );
       },
     );
   }
 
-  Widget _horizontal(BuildContext context) {
-    _scheduleSync();
-    return Row(
-      children: <Widget>[
-        Expanded(
-          // 常驻的细滚动条 + 两端渐隐，两个信号叠着用：滚动条说明「这里能滑」，
-          // 渐隐说明「现在滑到哪一端」。只靠渐隐不够，内容边界正好落在按钮间隙时
-          // 会被削得看不出来。
-          child: Scrollbar(
-            controller: _scroll,
-            thumbVisibility: true,
-            thickness: 2,
-            radius: const Radius.circular(2),
-            child: _fadeEdges(
-              context,
-              SingleChildScrollView(
-                controller: _scroll,
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 7),
-                child: Row(children: _items(context)),
-              ),
-            ),
-          ),
-        ),
-        if (widget.onOpenInspector != null) ...<Widget>[
-          Container(width: 1, height: 26, color: WbTheme.hairline(context)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 5, 8, 5),
-            child: WbToolButton(
-              icon: Icons.tune,
-              label: '样式',
-              selected: false,
-              onTap: widget.onOpenInspector!,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _vertical(BuildContext context) {
-    _scheduleSync();
-    final children = _items(context);
-    if (widget.onOpenInspector != null) {
-      children.add(_gap(context));
-      children.add(
-        WbToolButton(
-          icon: Icons.tune,
-          label: '样式',
-          selected: false,
-          onTap: widget.onOpenInspector!,
-        ),
-      );
-    }
-    return Scrollbar(
-      controller: _scroll,
-      thumbVisibility: true,
-      thickness: 2,
-      radius: const Radius.circular(2),
-      child: _fadeEdges(
-        context,
-        SingleChildScrollView(
-          controller: _scroll,
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(children: children),
-        ),
-      ),
-    );
-  }
-
   /// 两端按滚动位置渐隐：贴边的一端不再淡出，否则首尾图标会一直发灰。
+  ///
+  /// 内容没溢出时 `_atStart && _atEnd` 成立，直接原样返回——不能按「初值
+  /// 是 true」来判，那样在布局完成前会跳过渐隐，第一帧闪一下。
   Widget _fadeEdges(BuildContext context, Widget child) {
-    // 还没 attach 到滚动视图时宽度未知，先按原样画，等量完再决定。
     if (!_scroll.hasClients || (_atStart && _atEnd)) return child;
-    final horizontal = widget.horizontal;
     return ShaderMask(
       shaderCallback: (Rect bounds) {
         final clear = Colors.white.withValues(alpha: 0);
         return LinearGradient(
-          begin: horizontal ? Alignment.centerLeft : Alignment.topCenter,
-          end: horizontal ? Alignment.centerRight : Alignment.bottomCenter,
           colors: <Color>[
             _atStart ? Colors.white : clear,
             Colors.white,
             Colors.white,
             _atEnd ? Colors.white : clear,
           ],
-          stops: const <double>[0, 0.06, 0.94, 1],
+          stops: const <double>[0, 0.05, 0.95, 1],
         ).createShader(bounds);
       },
       blendMode: BlendMode.dstIn,
@@ -248,18 +257,10 @@ class _ToolRailState extends State<ToolRail> {
     );
   }
 
-  Widget _gap(BuildContext context) => widget.horizontal
-      ? Container(
-          width: 1,
-          height: 22,
-          margin: const EdgeInsets.symmetric(horizontal: 6),
-          color: WbTheme.hairline(context),
-        )
-      : Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: SizedBox(
-            width: 26,
-            child: Divider(color: WbTheme.hairline(context), height: 1),
-          ),
-        );
+  Widget _separator(BuildContext context) => Container(
+        width: 1,
+        height: 18,
+        margin: const EdgeInsets.symmetric(horizontal: 5),
+        color: WbTheme.chromeHairline(context),
+      );
 }
