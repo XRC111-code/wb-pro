@@ -16,6 +16,12 @@ Finder _iconButton(String tooltip) => find.byWidgetPredicate(
       (widget) => widget is WbIconButton && widget.tooltip == tooltip,
     );
 
+/// 工具按钮的提示走 miuix 的 Overlay，不再是 Material 的 Tooltip，
+/// 所以按 widget 本身定位，而不是 find.byTooltip。
+Finder _toolButton(String label) => find.byWidgetPredicate(
+      (widget) => widget is WbToolButton && widget.label == label,
+    );
+
 WbToolButton _tool(WidgetTester tester, String prefix) {
   return tester
       .widgetList<WbToolButton>(find.byType(WbToolButton))
@@ -36,7 +42,7 @@ void main() {
     await _pumpApp(tester);
     expect(_tool(tester, '选择').selected, isTrue);
 
-    await tester.tap(find.byTooltip('矩形  R'));
+    await tester.tap(_toolButton('矩形  R'));
     await tester.pumpAndSettle();
 
     expect(_tool(tester, '矩形').selected, isTrue);
@@ -58,7 +64,7 @@ void main() {
   testWidgets('拖拽画出一个矩形', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(find.byTooltip('矩形  R'));
+    await tester.tap(_toolButton('矩形  R'));
     await tester.pumpAndSettle();
 
     await tester.dragFrom(const Offset(500, 300), const Offset(140, 90));
@@ -75,7 +81,7 @@ void main() {
     final undo = tester.widget<WbIconButton>(_iconButton('撤销  Ctrl+Z'));
     expect(undo.onPressed, isNull);
 
-    await tester.tap(find.byTooltip('矩形  R'));
+    await tester.tap(_toolButton('矩形  R'));
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(400, 300), const Offset(100, 100));
     await tester.pumpAndSettle();
@@ -83,7 +89,7 @@ void main() {
     final enabledUndo = tester.widget<WbIconButton>(_iconButton('撤销  Ctrl+Z'));
     expect(enabledUndo.onPressed, isNotNull);
 
-    await tester.tap(find.byTooltip('撤销  Ctrl+Z'));
+    await tester.tap(_iconButton('撤销  Ctrl+Z'));
     await tester.pumpAndSettle();
     expect(find.text('0 个元素'), findsOneWidget);
   });
@@ -109,7 +115,7 @@ void main() {
   testWidgets('文本工具在画布上点出编辑框', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(find.byTooltip('文本  T'));
+    await tester.tap(_toolButton('文本  T'));
     await tester.pumpAndSettle();
 
     await tester.tapAt(const Offset(600, 320));
@@ -123,7 +129,7 @@ void main() {
   testWidgets('文本编辑期间点击画布只结束编辑', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(find.byTooltip('文本  T'));
+    await tester.tap(_toolButton('文本  T'));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(600, 320));
     await tester.pump(const Duration(milliseconds: 120));

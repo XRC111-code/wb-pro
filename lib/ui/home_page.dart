@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_miuix/miuix.dart';
 
 import '../io/document.dart';
 import '../io/document_store.dart';
@@ -222,16 +223,30 @@ class _HomePageState extends State<HomePage> {
         title: Text(title),
         content: SizedBox(width: 360, child: Text(message)),
         actions: <Widget>[
-          TextButton(
+          MiuixTextButton(
+            '取消',
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
+            minWidth: 0,
+            minHeight: 0,
+            cornerRadius: 10,
+            insideMargin: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            textStyle: const TextStyle(fontSize: 14),
           ),
-          FilledButton(
-            style: danger
-                ? FilledButton.styleFrom(backgroundColor: const Color(0xFFE03131))
-                : null,
+          MiuixButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(confirmLabel),
+            minWidth: 0,
+            minHeight: 0,
+            cornerRadius: 10,
+            insideMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+            colors: danger
+                ? const MiuixButtonColors(
+                    color: Color(0xFFE94634),
+                    disabledColor: Color(0xFFF3C9C4),
+                    contentColor: Colors.white,
+                    disabledContentColor: Colors.white,
+                  )
+                : MiuixButtonDefaults.buttonColorsPrimary(context),
+            child: Text(confirmLabel, style: const TextStyle(fontSize: 14)),
           ),
         ],
       ),
@@ -586,6 +601,7 @@ class _HomePageState extends State<HomePage> {
         child: Focus(
           autofocus: true,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               TopBar(
                 controller: _controller,
@@ -758,19 +774,19 @@ class _HomePageState extends State<HomePage> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(Icons.restore, size: 15, color: WbTheme.activeColor(context)),
+              MiuixIcon(
+                icon: Icons.restore,
+                size: 15,
+                tint: WbTheme.activeColor(context),
+              ),
               const SizedBox(width: 8),
-              Text(
+              MiuixText(
                 '发现 ${_formatAgo(_recoveryAt)}的自动存档',
                 style: const TextStyle(fontSize: 12.5),
               ),
-              const SizedBox(width: 8),
-              TextButton(
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(0, 30),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
+              const SizedBox(width: 4),
+              MiuixTextButton(
+                '恢复',
                 onPressed: () {
                   final document = _recovery;
                   if (document == null) return;
@@ -780,12 +796,18 @@ class _HomePageState extends State<HomePage> {
                   setState(() => _recovery = null);
                   _notice('已恢复自动存档');
                 },
-                child: const Text('恢复', style: TextStyle(fontSize: 12.5)),
+                minWidth: 0,
+                minHeight: 0,
+                cornerRadius: 8,
+                insideMargin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                textStyle: const TextStyle(fontSize: 12.5),
               ),
-              IconButton(
-                icon: const Icon(Icons.close, size: 15),
+              const SizedBox(width: 2),
+              WbIconButton(
+                icon: Icons.close,
                 tooltip: '忽略',
-                visualDensity: VisualDensity.compact,
+                size: 26,
+                iconSize: 15,
                 onPressed: () => setState(() => _recovery = null),
               ),
             ],
@@ -863,11 +885,24 @@ class _RenameDialogState extends State<_RenameDialog> {
         ),
       ),
       actions: <Widget>[
-        TextButton(
+        MiuixTextButton(
+          '取消',
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          minWidth: 0,
+          minHeight: 0,
+          cornerRadius: 10,
+          insideMargin: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          textStyle: const TextStyle(fontSize: 14),
         ),
-        FilledButton(onPressed: _submit, child: const Text('确定')),
+        MiuixButton(
+          onPressed: _submit,
+          minWidth: 0,
+          minHeight: 0,
+          cornerRadius: 10,
+          insideMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+          colors: MiuixButtonDefaults.buttonColorsPrimary(context),
+          child: const Text('确定', style: TextStyle(fontSize: 14)),
+        ),
       ],
     );
   }

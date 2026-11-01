@@ -1,7 +1,7 @@
 name: wb_pro
 description: "wb-pro —— 跨平台无限画布白板。手绘、形状、箭头、文本、便签、图片，支持 .wbpro 文档、PNG/SVG 导出与自动保存。"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: '>=3.6.0 <4.0.0'
@@ -15,6 +15,7 @@ dependencies:
   file_selector: ^1.0.3
   # 自动保存目录。桌面是 XDG/Documents，Android 是应用私有目录。
   path_provider: ^2.1.4
+  flutter_miuix: ^1.3.0
 
 dev_dependencies:
   flutter_test:
@@ -23,3 +24,19 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  #
+  # 界面字体。HarmonyOS Sans SC 由华为免费公开（遵循 HarmonyOS Sans Fonts
+  # License，可随软件分发，但不得改动字形、不得单独售卖字体本身）。许可原文
+  # 随包放在 assets/fonts/LICENSE.txt，关于对话框里也有一行署名。
+  #
+  # 三个字重都要内置：Flutter 不会合成字重，缺 500 时 Medium 文本会退回 400，
+  # 标题层级看起来就会塌掉。
+  fonts:
+    - family: HarmonyOS Sans SC
+      fonts:
+        - asset: assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
+          weight: 400
+        - asset: assets/fonts/HarmonyOS_Sans_SC_Medium.ttf
+          weight: 500
+        - asset: assets/fonts/HarmonyOS_Sans_SC_Bold.ttf
+          weight: 700

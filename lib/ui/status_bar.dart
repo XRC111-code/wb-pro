@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_miuix/miuix.dart';
 
 import '../state/editor_controller.dart';
 import 'actions.dart';
@@ -21,14 +22,18 @@ class StatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtle = WbTheme.subtleText(context);
-    return Container(
+    return SizedBox(
       height: WbTheme.statusBarHeight,
-      decoration: BoxDecoration(
+      child: MiuixSurface(
         color: WbTheme.panelColor(context),
-        border: Border(top: BorderSide(color: WbTheme.hairline(context))),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: AnimatedBuilder(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Container(height: 1, color: WbTheme.hairline(context)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: AnimatedBuilder(
         animation: controller,
         builder: (context, _) {
           return Row(
@@ -89,16 +94,18 @@ class StatusBar extends StatelessWidget {
                 iconSize: 14,
                 onPressed: actions.zoomOut,
               ),
-              InkWell(
-                onTap: actions.zoomReset,
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
+              MiuixPressable(
+                onPressed: actions.zoomReset,
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
                   width: 50,
                   height: 20,
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${(controller.viewport.zoom * 100).round()}%',
-                    style: TextStyle(fontSize: 11, color: subtle),
+                  child: Center(
+                    child: MiuixText(
+                      '${(controller.viewport.zoom * 100).round()}%',
+                      style: const TextStyle(fontSize: 11),
+                      color: subtle,
+                    ),
                   ),
                 ),
               ),
@@ -118,13 +125,22 @@ class StatusBar extends StatelessWidget {
               ),
             ],
           );
-        },
+                },
+              ),
+            ),
+          ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _text(BuildContext context, String value, {required Color color}) {
-    return Text(value, style: TextStyle(fontSize: 11, color: color));
+    return MiuixText(
+      value,
+      style: const TextStyle(fontSize: 11),
+      color: color,
+    );
   }
 
   Widget _dot(BuildContext context) => Container(

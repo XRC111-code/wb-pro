@@ -1,6 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_miuix/miuix.dart';
 
 import 'theme.dart';
+
+/// 统一的悬浮提示。
+///
+/// miuix 的 tooltip 走 Overlay，会自己处理越界翻转；Material 的 Tooltip 在
+/// 屏幕边缘经常被裁掉一半。
+Widget _tip({required String message, required Widget child}) {
+  if (message.isEmpty) return child;
+  return MiuixTooltipBox(
+    positioning: MiuixTooltipAnchorPosition.below,
+    tooltip: (context, scope) => MiuixPlainTooltip(
+      scope: scope,
+      child: Text(message),
+    ),
+    child: child,
+  );
+}
 
 /// 工具栏 / 顶栏上的图标按钮。
 class WbIconButton extends StatelessWidget {
@@ -29,24 +46,20 @@ class WbIconButton extends StatelessWidget {
     final enabled = onPressed != null;
     final foreground = color ??
         (!enabled
-            ? WbTheme.subtleText(context).withValues(alpha: 0.35)
+            ? MiuixTheme.of(context).colors.disabledOnSurface
             : active
                 ? accent
-                : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.78));
-    return Tooltip(
+                : MiuixTheme.of(context).colors.onSurfaceSecondary);
+    return _tip(
       message: tooltip,
-      child: Material(
-        color: active ? accent.withValues(alpha: 0.12) : Colors.transparent,
-        borderRadius: BorderRadius.circular(WbTheme.radiusSmall),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onPressed,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Icon(icon, size: iconSize, color: foreground),
-          ),
-        ),
+      child: MiuixIconButton(
+        onPressed: onPressed,
+        enabled: enabled,
+        backgroundColor: active ? accent.withValues(alpha: 0.12) : null,
+        cornerRadius: WbTheme.radiusSmall,
+        minWidth: size,
+        minHeight: size,
+        child: MiuixIcon(icon: icon, size: iconSize, tint: foreground),
       ),
     );
   }
@@ -70,27 +83,22 @@ class WbToolButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = WbTheme.activeColor(context);
-    return Tooltip(
+    return _tip(
       message: label,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),
-        child: Material(
-          color: selected ? accent : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: SizedBox(
-              width: 40,
-              height: 38,
-              child: Icon(
-                icon,
-                size: 19,
-                color: selected
-                    ? Colors.white
-                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.76),
-              ),
-            ),
+        child: MiuixIconButton(
+          onPressed: onTap,
+          backgroundColor: selected ? accent : null,
+          cornerRadius: 12,
+          minWidth: 40,
+          minHeight: 38,
+          child: MiuixIcon(
+            icon: icon,
+            size: 19,
+            tint: selected
+                ? Colors.white
+                : MiuixTheme.of(context).colors.onSurfaceSecondary,
           ),
         ),
       ),
@@ -114,26 +122,21 @@ class WbSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Row(
             children: <Widget>[
-              Text(
+              MiuixSmallTitle(
                 title,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4,
-                  color: WbTheme.subtleText(context),
-                ),
+                textColor: WbTheme.subtleText(context),
+                insideMargin: const EdgeInsets.symmetric(vertical: 6),
               ),
               const Spacer(),
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 8),
           child,
         ],
       ),
@@ -163,35 +166,59 @@ class WbColorGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = WbTheme.activeColor(context);
-    return Wrap(
-      spacing: 7,
-      runSpacing: 7,
-      children: <Widget>[
-        if (allowNone)
-          _Dot(
-            size: dotSize,
-            color: null,
-            label: noneLabel,
-            selected: selected == null,
-            accent: accent,
-            onTap: () => onSelected(null),
-          ),
-        for (final color in colors)
-          _Dot(
-            size: dotSize,
-            color: color,
-            selected: selected != null && selected!.toARGB32() == color.toARGB32(),
-            accent: accent,
-            onTap: () => onSelected(color),
-          ),
-      ],
+    final count = colors.length + (allowNone ? 1 : 0);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 固定列数而不是让 Wrap 自由折行：12 个色板在 240 宽的面板里会折成
+        // 7+5，第二行孤零零挂五个，看着像忘了摆整齐。列数按色板总数挑能整除的。
+        final columns = _columnsFor(count);
+        const gap = 4.0;
+        final slot =
+            (constraints.maxWidth - gap * (columns - 1)) / columns;
+        final dot = (slot - 6).clamp(14.0, dotSize).toDouble();
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: <Widget>[
+            if (allowNone)
+              _Dot(
+                size: dot,
+                slot: slot,
+                color: null,
+                label: noneLabel,
+                selected: selected == null,
+                accent: accent,
+                onTap: () => onSelected(null),
+              ),
+            for (final color in colors)
+              _Dot(
+                size: dot,
+                slot: slot,
+                color: color,
+                selected:
+                    selected != null && selected!.toARGB32() == color.toARGB32(),
+                accent: accent,
+                onTap: () => onSelected(color),
+              ),
+          ],
+        );
+      },
     );
+  }
+
+  static int _columnsFor(int count) {
+    if (count <= 6) return count;
+    for (final candidate in <int>[6, 5, 4]) {
+      if (count % candidate == 0) return candidate;
+    }
+    return 6;
   }
 }
 
 class _Dot extends StatelessWidget {
   const _Dot({
     required this.size,
+    required this.slot,
     required this.color,
     required this.selected,
     required this.accent,
@@ -200,6 +227,7 @@ class _Dot extends StatelessWidget {
   });
 
   final double size;
+  final double slot;
   final Color? color;
   final bool selected;
   final Color accent;
@@ -209,38 +237,47 @@ class _Dot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = WbTheme.hairline(context);
-    return Tooltip(
+    return _tip(
       message: label ?? '',
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: size + 6,
-          height: size + 6,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: selected ? accent : Colors.transparent,
-              width: 1.6,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color ?? Colors.transparent,
-              border: Border.all(
-                color: color == null ? border : Colors.black.withValues(alpha: 0.10),
+      child: MiuixPressable(
+        onPressed: onTap,
+        borderRadius: BorderRadius.circular(slot / 2),
+        child: SizedBox(
+          width: slot,
+          height: slot,
+          child: Center(
+            child: Container(
+              width: size + 6,
+              height: size + 6,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? accent : Colors.transparent,
+                  width: 1.8,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color ?? Colors.transparent,
+                  border: Border.all(
+                    color: color == null
+                        ? border
+                        : Colors.black.withValues(alpha: 0.10),
+                  ),
+                ),
+                child: color == null
+                    ? Icon(
+                        Icons.block,
+                        size: size * 0.66,
+                        color: WbTheme.subtleText(context),
+                      )
+                    : null,
               ),
             ),
-            child: color == null
-                ? Icon(
-                    Icons.block,
-                    size: size * 0.66,
-                    color: WbTheme.subtleText(context),
-                  )
-                : null,
           ),
         ),
       ),
@@ -256,7 +293,10 @@ class WbSegmentedOption<T> {
   final IconData? icon;
 }
 
-/// 横向分段控件（线型、字号档位这类 3~4 选 1 的场景）。
+/// 横向分段控件（线型、对齐这类 3~4 选 1 的场景）。
+///
+/// 用 miuix 的 TabRow：选中块会在两项之间滑动，比 Material 的
+/// SegmentedButton 更接近手机系统的观感。图标选项退回自绘——TabRow 只吃文字。
 class WbSegmented<T> extends StatelessWidget {
   const WbSegmented({
     super.key,
@@ -271,58 +311,61 @@ class WbSegmented<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final index = options.indexWhere((o) => o.value == value);
+    if (options.every((o) => o.icon == null)) {
+      final dark = MiuixTheme.of(context).brightness == Brightness.dark;
+      final accent = WbTheme.activeColor(context);
+      return MiuixTabRow(
+        tabs: <String>[for (final o in options) o.label],
+        selectedTabIndex: index < 0 ? 0 : index,
+        onTabSelected: (i) => onChanged(options[i].value),
+        height: 32,
+        cornerRadius: 9,
+        itemSpacing: 3,
+        minWidth: 0,
+        maxWidth: double.infinity,
+        colors: MiuixTabRowColors(
+          backgroundColor: dark ? const Color(0xFF262A31) : const Color(0xFFEFF1F4),
+          contentColor: WbTheme.subtleText(context),
+          selectedBackgroundColor: dark ? const Color(0xFF3A3F47) : Colors.white,
+          selectedContentColor: accent,
+        ),
+      );
+    }
+    return _iconSegmented(context, index);
+  }
+
+  Widget _iconSegmented(BuildContext context, int index) {
     final accent = WbTheme.activeColor(context);
-    final surface = WbTheme.panelColor(context);
+    final dark = MiuixTheme.of(context).brightness == Brightness.dark;
     return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white.withValues(alpha: 0.05)
-            : Colors.black.withValues(alpha: 0.035),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      height: 32,
       padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF262A31) : const Color(0xFFEFF1F4),
+        borderRadius: BorderRadius.circular(9),
+      ),
       child: Row(
         children: <Widget>[
-          for (final option in options)
+          for (var i = 0; i < options.length; i++)
             Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(option.value),
+              child: MiuixPressable(
+                onPressed: () => onChanged(options[i].value),
+                borderRadius: BorderRadius.circular(7),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
+                  duration: const Duration(milliseconds: 140),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: option.value == value ? surface : Colors.transparent,
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: option.value == value
-                        ? <BoxShadow>[
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
+                    color: i == index
+                        ? (dark ? const Color(0xFF3A3F47) : Colors.white)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(7),
                   ),
-                  child: option.icon == null
-                      ? Text(
-                          option.label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: option.value == value ? FontWeight.w600 : FontWeight.w400,
-                            color: option.value == value
-                                ? accent
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withValues(alpha: 0.7),
-                          ),
-                        )
-                      : Icon(
-                          option.icon,
-                          size: 16,
-                          color: option.value == value ? accent : WbTheme.subtleText(context),
-                        ),
+                  child: MiuixIcon(
+                    icon: options[i].icon!,
+                    size: 16,
+                    tint: i == index ? accent : WbTheme.subtleText(context),
+                  ),
                 ),
               ),
             ),
@@ -362,36 +405,32 @@ class WbSliderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final labelStyle = TextStyle(
+      fontFamily: WbTheme.fontFamily,
+      fontSize: 12,
+      color: WbTheme.subtleText(context),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: <Widget>[
           SizedBox(
             width: 42,
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 12, color: WbTheme.subtleText(context)),
-            ),
+            child: Text(label, style: labelStyle),
           ),
           Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.5),
-                activeTrackColor: WbTheme.activeColor(context),
-                inactiveTrackColor: WbTheme.hairline(context),
-                thumbColor: WbTheme.activeColor(context),
-                overlayColor: WbTheme.activeColor(context).withValues(alpha: 0.12),
-              ),
-              child: Slider(
+            // miuix 的滑块没有 onChangeStart，用 Listener 在按下时补一个；
+            // 结束信号它自带（onValueChangeFinished）。
+            child: Listener(
+              onPointerDown: (_) => onChangeStart?.call(value),
+              child: MiuixSlider(
                 value: value.clamp(min, max).toDouble(),
                 min: min,
                 max: max,
-                divisions: divisions,
-                onChangeStart: onChangeStart,
-                onChangeEnd: onChangeEnd,
-                onChanged: onChanged,
+                onValueChanged: onChanged,
+                onValueChangeFinished: onChangeEnd == null
+                    ? null
+                    : () => onChangeEnd!(value.clamp(min, max).toDouble()),
               ),
             ),
           ),
@@ -400,7 +439,7 @@ class WbSliderRow extends StatelessWidget {
             child: Text(
               formatter?.call(value) ?? value.toStringAsFixed(0),
               textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 12, color: WbTheme.subtleText(context)),
+              style: labelStyle,
             ),
           ),
         ],
@@ -424,12 +463,16 @@ class WbPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: width,
-      padding: padding,
-      decoration: WbTheme.panelDecoration(context),
-      clipBehavior: Clip.antiAlias,
-      child: child,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(WbTheme.radius),
+        child: MiuixSurface(
+          cornerRadius: WbTheme.radius,
+          shadowElevation: 10,
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
     );
   }
 }

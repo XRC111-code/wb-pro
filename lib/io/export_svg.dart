@@ -245,7 +245,7 @@ String _textToSvg(TextElement e) {
   final buffer = StringBuffer()
     ..writeln('    <text x="${_n(x)}" y="${_n(e.frame.top + firstBaseline)}" '
         'fill="${_hex(e.color)}" fill-opacity="${_n(e.color.a * e.opacity)}" '
-        'font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" '
+        'font-family="$kWbSvgFontStack" '
         'font-size="${_n(e.fontSize)}" text-anchor="$anchor"'
         '${e.bold ? ' font-weight="700"' : ''}'
         '${e.italic ? ' font-style="italic"' : ''}>');
@@ -288,7 +288,7 @@ String _noteToSvg(NoteElement e) {
   final y = rect.top + 14 + firstBaseline;
   buffer.writeln('    <text x="${_n(x)}" y="${_n(y)}" '
       'fill="${_hex(e.textColor)}" fill-opacity="${_n(e.opacity)}" '
-      'font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" '
+      'font-family="$kWbSvgFontStack" '
       'font-size="${_n(e.fontSize)}">');
   for (var i = 0; i < lines.length; i++) {
     final dy = i == 0 ? 0.0 : e.fontSize * 1.4;

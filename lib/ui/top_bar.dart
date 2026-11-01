@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_miuix/miuix.dart';
 
 import '../state/editor_controller.dart';
 import 'actions.dart';
@@ -24,15 +25,18 @@ class TopBar extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         final scheme = Theme.of(context).colorScheme;
-        return Container(
+        return SizedBox(
           height: WbTheme.topBarHeight,
-          decoration: BoxDecoration(
+          child: MiuixSurface(
             color: WbTheme.panelColor(context),
-            border: Border(bottom: BorderSide(color: WbTheme.hairline(context))),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            children: <Widget>[
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: <Widget>[
               _logo(context),
               if (!compact) ...<Widget>[
                 const SizedBox(width: 8),
@@ -49,7 +53,13 @@ class TopBar extends StatelessWidget {
                 Container(width: 1, height: 18, color: WbTheme.hairline(context)),
               ],
               const SizedBox(width: 10),
-              Flexible(child: _documentTitle(context)),
+              // 不要把文档名做成 Flexible：它会和右边的 Spacer 平分剩余空间，
+              // 结果按钮组被顶到画布中间，属性面板一开更明显。限个最大宽度，
+              // 剩下的空间全交给 Spacer。
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: _documentTitle(context),
+              ),
               const Spacer(),
               WbIconButton(
                 icon: Icons.undo,
@@ -79,7 +89,13 @@ class TopBar extends StatelessWidget {
               ],
               const SizedBox(width: 4),
               _menu(context),
-            ],
+                      ],
+                    ),
+                  ),
+                ),
+                Container(height: 1, color: WbTheme.hairline(context)),
+              ],
+            ),
           ),
         );
       },
@@ -145,7 +161,11 @@ class TopBar extends StatelessWidget {
   Widget _menu(BuildContext context) {
     return PopupMenuButton<String>(
       tooltip: '菜单',
-      icon: const Icon(Icons.menu, size: 19),
+      icon: MiuixIcon(
+        icon: Icons.menu,
+        size: 19,
+        tint: MiuixTheme.of(context).colors.onSurfaceSecondary,
+      ),
       constraints: const BoxConstraints(minWidth: 246),
       position: PopupMenuPosition.under,
       onSelected: (value) => _handleMenu(context, value),
@@ -227,17 +247,21 @@ class TopBar extends StatelessWidget {
           : subtle.withValues(alpha: 0.4);
       return PopupMenuItem<String>(
         value: value,
-        height: 36,
+        height: 38,
         enabled: enabled,
         child: Row(
           children: <Widget>[
-            Icon(icon, size: 16, color: color),
+            MiuixIcon(icon: icon, size: 16, tint: color),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(label, style: TextStyle(fontSize: 13, color: color)),
+              child: MiuixText(label, style: const TextStyle(fontSize: 13), color: color),
             ),
             if (shortcut != null)
-              Text(shortcut, style: TextStyle(fontSize: 11, color: subtle)),
+              MiuixText(
+                shortcut,
+                style: const TextStyle(fontSize: 11),
+                color: subtle,
+              ),
           ],
         ),
       );

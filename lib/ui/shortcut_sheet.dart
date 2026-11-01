@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_miuix/miuix.dart';
 
 import 'theme.dart';
 
@@ -125,9 +126,14 @@ Future<void> showShortcutsDialog(BuildContext context) {
         ),
       ),
       actions: <Widget>[
-        TextButton(
+        MiuixButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('知道了'),
+          minWidth: 0,
+          minHeight: 0,
+          cornerRadius: 10,
+          insideMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+          colors: MiuixButtonDefaults.buttonColorsPrimary(context),
+          child: const Text('知道了', style: TextStyle(fontSize: 14)),
         ),
       ],
     ),
@@ -164,7 +170,7 @@ Future<void> showAboutWbPro(BuildContext context) {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              '跨平台无限画布白板 · 1.0.0',
+              '跨平台无限画布白板 · 1.1.0',
               style: TextStyle(fontSize: 13, color: WbTheme.subtleText(context)),
             ),
             const SizedBox(height: 14),
@@ -183,13 +189,31 @@ Future<void> showAboutWbPro(BuildContext context) {
               'github.com/XRC111-code/wb-pro',
               style: TextStyle(fontSize: 12, color: WbTheme.activeColor(context)),
             ),
+            const SizedBox(height: 16),
+            Divider(height: 1, color: WbTheme.hairline(context)),
+            const SizedBox(height: 12),
+            // HarmonyOS Sans 的许可要求在使用它的软件里给出显著署名。
+            Text(
+              '界面字体 HarmonyOS Sans SC © 2021 华为终端有限公司，依据 HarmonyOS Sans 字体许可协议使用。'
+              '界面组件基于 miuix Flutter 移植版（Apache-2.0）。',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.6,
+                color: WbTheme.subtleText(context),
+              ),
+            ),
           ],
         ),
       ),
       actions: <Widget>[
-        TextButton(
+        MiuixButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
+          minWidth: 0,
+          minHeight: 0,
+          cornerRadius: 10,
+          insideMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+          colors: MiuixButtonDefaults.buttonColorsPrimary(context),
+          child: const Text('关闭', style: TextStyle(fontSize: 14)),
         ),
       ],
     ),

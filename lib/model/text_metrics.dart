@@ -1,10 +1,18 @@
 import 'package:flutter/painting.dart';
 
-/// 白板里的文本样式。
+/// 白板使用的字体族。
 ///
-/// 不引入自定义字体：桌面端用系统 UI 字体、Android 用 Roboto/思源，体积为零。
-/// 代价是同一文档在不同平台的字宽略有差异——对白板这种自由布局的工具可以
-/// 接受，对排版工具不行。这个取舍写在 README 的「已知差异」里。
+/// 内置 HarmonyOS Sans SC（见 pubspec 的 fonts 段），界面与画布上的文字用
+/// 同一套字形。常量放在 model 层而不是 ui 层：画布排版属于模型，不该反过来
+/// 依赖界面主题；`WbTheme.fontFamily` 引用这里。
+const String kWbFontFamily = 'HarmonyOS Sans SC';
+
+/// SVG 导出时写的字体栈。首选内置字体，再按平台回退，避免在没装字体的机器上
+/// 直接变成衬线体。
+const String kWbSvgFontStack =
+    'HarmonyOS Sans SC, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+
+/// 白板里的文本样式。
 TextStyle buildTextStyle({
   required double fontSize,
   required Color color,
@@ -13,8 +21,10 @@ TextStyle buildTextStyle({
   double lineHeight = 1.35,
   TextDecoration decoration = TextDecoration.none,
   Color? decorationColor,
+  String fontFamily = kWbFontFamily,
 }) =>
     TextStyle(
+      fontFamily: fontFamily,
       fontSize: fontSize,
       color: color,
       fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
