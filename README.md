@@ -148,6 +148,8 @@ lib/
   io/          document.dart  .wbpro 编解码
                document_store.dart  系统文件对话框、自动保存
                export_png.dart / export_svg.dart
+assets/
+  fonts/       HarmonyOS_Sans_SC_{Regular,Medium,Bold}.ttf + LICENSE.txt
 ```
 
 ## 设计说明
