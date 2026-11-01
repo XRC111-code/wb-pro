@@ -247,7 +247,7 @@ class WbTheme {
       ),
       boxShadow: <BoxShadow>[
         BoxShadow(
-          color: Colors.black.withValues(alpha: dark ? 0.22 : 0.07),
+          color: Colors.black.withValues(alpha: dark ? 0.22 : 0.10),
           blurRadius: 16,
           offset: const Offset(0, 5),
         ),
