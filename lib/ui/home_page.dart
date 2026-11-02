@@ -11,6 +11,7 @@ import '../io/document.dart';
 import '../io/document_store.dart';
 import '../io/export_png.dart';
 import '../io/export_svg.dart';
+import '../model/canvas_style.dart';
 import '../model/element.dart';
 import '../render/painting.dart';
 import '../state/editor_controller.dart';
@@ -31,9 +32,16 @@ import 'widgets.dart';
 /// 职责边界：这里只做「把 IO、对话框、布局串起来」，所有编辑规则都在
 /// [EditorController] 里。这样 90% 的行为可以脱离 Widget 测试。
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.onToggleTheme});
+  const HomePage({
+    super.key,
+    required this.onToggleTheme,
+    this.initialCanvasColor = kCanvasPaper,
+  });
 
   final VoidCallback onToggleTheme;
+
+  /// 首次打开时空白文档的底色，由 [WbApp] 按当前主题给出。
+  final Color initialCanvasColor;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -57,6 +65,9 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _controller = EditorController();
+    // 先定底色再挂监听：这一步会顺带把默认笔色翻到能看清的一面，但它不是
+    // 用户的编辑，不该触发自动保存。
+    _controller.setCanvasColor(widget.initialCanvasColor, markDirty: false);
     _controller.addListener(_onControllerChanged);
     _actions = _buildActions();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAutosave());
@@ -106,6 +117,7 @@ class _HomePageState extends State<HomePage> {
   WbDocument _buildDocument() => WbDocument(
         name: _controller.name,
         elements: _controller.elements,
+        canvasColor: _controller.canvasColor,
         pan: _controller.viewport.pan,
         zoom: _controller.viewport.zoom,
       );
@@ -119,12 +131,22 @@ class _HomePageState extends State<HomePage> {
       filePath: path,
       pan: document.pan,
       zoom: document.zoom,
+      canvasColor: document.canvasColor,
     );
   }
 
+  /// 新文档的底色跟随当前主题：深色界面下新建一张黑纸，才不会一打开就是
+  /// 一块刺眼的白。之后它归文档所有，切主题不会再变。
+  Color get _freshCanvasColor =>
+      Theme.of(context).brightness == Brightness.dark ? kCanvasInk : kCanvasPaper;
+
   Future<void> _newDocument() async {
     if (!await _confirmDiscard()) return;
-    _loadDocument(const WbDocument(name: '未命名白板', elements: <WbElement>[]));
+    _loadDocument(WbDocument(
+      name: '未命名白板',
+      elements: const <WbElement>[],
+      canvasColor: _freshCanvasColor,
+    ));
     await AutosaveStore.clear();
   }
 
@@ -203,6 +225,28 @@ class _HomePageState extends State<HomePage> {
     if (ok) _controller.clearCanvas();
   }
 
+  /// 换画布底色。
+  ///
+  /// 只改底色和「下一次新建」的笔色，不动已有元素。切换后如果默认笔色被
+  /// 翻转了，明确说一句 —— 用户看到工具栏颜色变了却不知道为什么，比看不见
+  /// 线条更让人困惑。
+  Future<void> _chooseCanvasColor() async {
+    final preset = await showDialog<CanvasPreset>(
+      context: context,
+      builder: (context) => _CanvasColorDialog(current: _controller.canvasColor),
+    );
+    if (preset == null) return;
+    final before = _controller.style.stroke;
+    _controller.setCanvasColor(preset.color);
+    final inkChanged = _controller.style.stroke.toARGB32() != before.toARGB32();
+    if (_controller.elements.isNotEmpty && inkChanged) {
+      _notice('画布已换成「${preset.name}」。已画的内容不会自动换色，'
+          '选中后可在属性面板里调；新画的笔已改为${isDarkCanvas(preset.color) ? '浅色' : '深色'}。');
+    } else if (inkChanged) {
+      _notice('画布已换成「${preset.name}」，默认画笔改为${isDarkCanvas(preset.color) ? '浅色' : '深色'}。');
+    }
+  }
+
   Future<bool> _confirmDiscard() async {
     if (!_controller.dirty) return true;
     return _confirm(
@@ -274,7 +318,12 @@ class _HomePageState extends State<HomePage> {
 
     setState(() => _busy = true);
     try {
-      final bytes = await exportPng(_controller.elements);
+      // 导出就是「把这块画布拍下来」：底色跟着文档走，否则深色画布导出来是
+      // 一张白底图，和在屏幕上看到的不是同一件东西。
+      final bytes = await exportPng(
+        _controller.elements,
+        options: PngExportOptions(background: _controller.canvasColor),
+      );
       await _writeBytesWithFallback(
           path, bytes, '${_controller.name}.png', 'PNG');
     } catch (error) {
@@ -298,7 +347,10 @@ class _HomePageState extends State<HomePage> {
 
     setState(() => _busy = true);
     try {
-      final svg = exportSvg(_controller.elements);
+      final svg = exportSvg(
+        _controller.elements,
+        options: SvgExportOptions(background: _controller.canvasColor),
+      );
       await _writeBytesWithFallback(
         path,
         Uint8List.fromList(utf8.encode(svg)),
@@ -461,9 +513,17 @@ class _HomePageState extends State<HomePage> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(fontSize: 13)),
+        // 不用 SnackBar.width：它和 margin 互斥，而底部这条横条必须抬到
+        // 工具条上方 —— 否则提示一出现就把十三个工具按钮全盖住。
+        content: Align(
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: 460,
+            child: Text(message, style: const TextStyle(fontSize: 13)),
+          ),
+        ),
         behavior: SnackBarBehavior.floating,
-        width: 460,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -497,6 +557,7 @@ class _HomePageState extends State<HomePage> {
         zoomToFit: _zoomToFit,
         toggleGrid: () => _controller.setShowGrid(!_controller.showGrid),
         toggleSnap: () => _controller.setSnapToGrid(!_controller.snapToGrid),
+        chooseCanvasColor: _chooseCanvasColor,
       );
 
   // ── 快捷键 ─────────────────────────────────────────────────────────────────
@@ -740,9 +801,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _emptyHint(BuildContext context) {
-    // 画布永远是浅色，提示色就不能取 chrome 的「次要文字」——那套颜色跟着
-    // 主题走，深色模式下是浅灰，摆在白纸上看不见。
-    const ink = Color(0xFF1F2933);
+    // 提示色从画布底色算出来，不能取 chrome 的「次要文字」——那套颜色跟着
+    // 主题走，深色主题下是浅灰，摆在纸白画布上看不见；墨色画布上又反过来。
+    final ink = inkOnCanvas(_controller.canvasColor);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -779,11 +840,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _hintChip(String keys, String label) {
-    const ink = Color(0xFF1F2933);
+    final ink = inkOnCanvas(_controller.canvasColor);
+    final darkCanvas = isDarkCanvas(_controller.canvasColor);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
+        color: darkCanvas
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: ink.withValues(alpha: 0.10)),
       ),
@@ -884,6 +948,101 @@ class _HomePageState extends State<HomePage> {
           embedded: true,
           onClose: () => Navigator.of(sheetContext).pop(),
         ),
+      ),
+    );
+  }
+}
+
+class _CanvasColorDialog extends StatelessWidget {
+  const _CanvasColorDialog({required this.current});
+
+  final Color current;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtle = WbTheme.subtleText(context);
+    return AlertDialog(
+      title: const Text('画布底色'),
+      content: SizedBox(
+        width: 372,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (final preset in kCanvasPresets)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _presetCard(context, preset),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '底色随文档保存：换主题不会改变它，导出图片时也会带上。',
+              style: TextStyle(fontSize: 12, height: 1.55, color: subtle),
+            ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        MiuixTextButton(
+          '取消',
+          onPressed: () => Navigator.of(context).pop(),
+          minWidth: 0,
+          minHeight: 0,
+          cornerRadius: 10,
+          insideMargin: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          textStyle: const TextStyle(fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _presetCard(BuildContext context, CanvasPreset preset) {
+    final selected = preset.matches(current);
+    final accent = WbTheme.activeColor(context);
+    final subtle = WbTheme.subtleText(context);
+    return MiuixPressable(
+      onPressed: () => Navigator.of(context).pop(preset),
+      borderRadius: BorderRadius.circular(10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 68,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: preset.color,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selected ? accent : WbTheme.hairline(context),
+                width: selected ? 2 : 1,
+              ),
+            ),
+            // 勾的颜色按色卡自己算，不能用主题色：深色卡上白勾，浅色卡上墨勾。
+            child: selected
+                ? Icon(Icons.check_rounded,
+                    size: 20, color: inkOnCanvas(preset.color))
+                : null,
+          ),
+          const SizedBox(height: 7),
+          Text(
+            preset.name,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(preset.hint, style: TextStyle(fontSize: 10.5, color: subtle)),
+        ],
       ),
     );
   }

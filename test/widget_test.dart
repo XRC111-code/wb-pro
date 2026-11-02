@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wb_pro/app.dart';
+import 'package:wb_pro/model/canvas_style.dart';
+import 'package:wb_pro/ui/canvas_view.dart';
 import 'package:wb_pro/ui/widgets.dart';
 
 Future<void> _pumpApp(WidgetTester tester) async {
@@ -26,6 +28,16 @@ WbToolButton _tool(WidgetTester tester, String prefix) {
   return tester
       .widgetList<WbToolButton>(find.byType(WbToolButton))
       .firstWhere((button) => button.label.startsWith(prefix));
+}
+
+/// 画布底色不在 Widget 树的可读属性上，只能从画笔里取。
+Color _canvasBackground(WidgetTester tester) {
+  return tester
+      .widgetList<CustomPaint>(find.byType(CustomPaint))
+      .map((widget) => widget.painter)
+      .whereType<ScenePainter>()
+      .first
+      .background;
 }
 
 void main() {
@@ -103,6 +115,29 @@ void main() {
     expect(find.text('导出 PNG…'), findsOneWidget);
     expect(find.text('导出 SVG…'), findsOneWidget);
     expect(find.text('另存为…'), findsOneWidget);
+  });
+
+  testWidgets('菜单里可以换画布底色', (tester) async {
+    await _pumpApp(tester);
+
+    // 深色界面新建的空白文档是墨黑画布。
+    expect(_canvasBackground(tester).toARGB32(), kCanvasInk.toARGB32());
+
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pumpAndSettle();
+    // 视图相关项在子菜单里，主菜单保持一屏能放下。
+    await tester.tap(find.text('视图与帮助'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('画布底色…'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('纸白'), findsOneWidget);
+    expect(find.text('墨黑'), findsOneWidget);
+
+    await tester.tap(find.text('纸白'));
+    await tester.pumpAndSettle();
+
+    expect(_canvasBackground(tester).toARGB32(), kCanvasPaper.toARGB32());
   });
 
   testWidgets('选中元素后才出现属性面板', (tester) async {

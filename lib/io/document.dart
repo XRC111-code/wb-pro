@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import '../model/canvas_style.dart';
 import '../model/element.dart';
+import '../util/color_utils.dart';
 
 /// 文档格式错误（文件不是 wb-pro、JSON 语法错、根节点类型不对）。
 ///
@@ -35,6 +37,7 @@ class WbDocument {
   const WbDocument({
     required this.name,
     required this.elements,
+    this.canvasColor = kCanvasPaper,
     this.pan = Offset.zero,
     this.zoom = 1,
     this.createdAt,
@@ -43,12 +46,18 @@ class WbDocument {
 
   /// 文件头里的格式标识。读到别的值直接拒绝，避免把同名 JSON 当成白板。
   static const String formatId = 'wb-pro';
-  static const int formatVersion = 1;
+
+  /// 2：加画布底色（`canvas.color`）。旧版本读到 v2 会提示「来自更新版本」，
+  /// 这正是想要的——它确实会把深色画布显示成浅色。
+  static const int formatVersion = 2;
   static const String extension = 'wbpro';
   static const String suggestedExtension = '.wbpro';
 
   final String name;
   final List<WbElement> elements;
+
+  /// 画布底色。属于文档而不是主题，见 [canvas_style.dart] 的说明。
+  final Color canvasColor;
   final Offset pan;
   final double zoom;
   final DateTime? createdAt;
@@ -60,6 +69,7 @@ class WbDocument {
         'name': name,
         'createdAt': (createdAt ?? DateTime.now()).toIso8601String(),
         'modifiedAt': (modifiedAt ?? DateTime.now()).toIso8601String(),
+        'canvas': <String, Object?>{'color': argbOf(canvasColor)},
         'viewport': <String, Object?>{
           'panX': pan.dx,
           'panY': pan.dy,
@@ -137,6 +147,7 @@ class WbDocument {
       WbDocument(
         name: name is String && name.trim().isNotEmpty ? name.trim() : '未命名白板',
         elements: List<WbElement>.unmodifiable(elements),
+        canvasColor: _canvasColor(map['canvas']),
         pan: pan,
         zoom: zoom,
         createdAt: _parseDate(map['createdAt']),
@@ -144,6 +155,21 @@ class WbDocument {
       ),
       warnings,
     );
+  }
+
+  /// 画布底色容错：缺字段、类型不对、颜色越界都回落到纸白，不报警告。
+  ///
+  /// 底色和元素不一样：它丢了不会丢内容，只是回到了默认外观。为这个弹一条
+  /// 「部分内容无法显示」只会让用户以为文件坏了。
+  static Color _canvasColor(Object? raw) {
+    if (raw is! Map) return kCanvasPaper;
+    final value = raw['color'];
+    if (value is! num) return kCanvasPaper;
+    final argb = value.toInt();
+    if (argb < 0 || argb > 0xFFFFFFFF) return kCanvasPaper;
+    // 画布必须不透明：半透明底色会透出窗口的背景色，导出时又会和 PNG 的
+    // 透明通道叠在一起，同一份文档在两处看起来不一样。
+    return colorOf(argb).withValues(alpha: 1);
   }
 
   static double _double(Object? value, [double fallback = 0]) =>

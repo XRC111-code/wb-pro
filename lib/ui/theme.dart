@@ -21,11 +21,8 @@ class WbTheme {
   static const Color accent = Color(0xFF00BE6E);
   static const Color accentDark = Color(0xFF2FD98A);
 
-  /// 画布底色。固定浅色，不跟随主题。
-  ///
-  /// 白板上画的是用户的内容，颜色是绝对值。画布一变深，浅色主题下画的深色
-  /// 线条就整片消失。深色模式只该改变外围的 chrome。
-  static const Color canvasColor = Color(0xFFFAFAFA);
+  // 画布底色不在这里：它属于文档（见 model/canvas_style.dart），同一份 .wbpro
+  // 在深浅色界面里打开必须长得一样。主题只管外围的 chrome。
 
   static const double inspectorWidth = 272;
   static const double radius = 12;

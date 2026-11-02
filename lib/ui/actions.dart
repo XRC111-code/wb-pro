@@ -34,6 +34,7 @@ class WbActions {
     required this.zoomToFit,
     required this.toggleGrid,
     required this.toggleSnap,
+    required this.chooseCanvasColor,
   });
 
   final VoidCallback newDocument;
@@ -63,4 +64,5 @@ class WbActions {
   final VoidCallback zoomToFit;
   final VoidCallback toggleGrid;
   final VoidCallback toggleSnap;
+  final VoidCallback chooseCanvasColor;
 }

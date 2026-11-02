@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Viewport;
 import 'package:flutter/services.dart';
 
+import '../model/canvas_style.dart';
 import '../model/element.dart';
 import '../model/geometry.dart';
 import '../state/editor_controller.dart';
@@ -688,12 +689,10 @@ class CanvasViewState extends State<CanvasView> {
                   controller: _controller,
                   preview: _preview,
                   marquee: _marquee,
-                  // 画布永远是「白纸」，不跟主题一起变深。上面的颜色是用户
-                  // 画的内容，属于作品本身：浅色主题下画的深色线条，一切到
-                  // 深色就整片看不见了。深色模式该变的是外围的工具栏和面板
-                  // —— Figma、Miro 都是这个处理方式。
-                  background: WbTheme.canvasColor,
-                  gridColor: const Color(0x14000000),
+                  // 底色来自文档，不是主题：同一份 .wbpro 换台机器、换个系统
+                  // 主题，看到的必须是同一张图。
+                  background: _controller.canvasColor,
+                  gridColor: gridOnCanvas(_controller.canvasColor),
                   selectionColor: WbTheme.accent,
                   onImageReady: () {
                     if (mounted) setState(() {});
@@ -811,12 +810,13 @@ class ScenePainter extends CustomPainter {
             ))
         .toList(growable: false);
 
-    // 框线先垫一道白，再压彩色。白板上任何颜色都可能出现，选中一个深色
-    // 形状时单根细线会陷进去；垫白之后在浅底和深底上都立得住。
+    // 框线先垫一道「比底色更极端」的线，再压彩色。白板上任何颜色都可能
+    // 出现，选中一个深色形状时单根细线会陷进去；浅底垫白、深底垫黑之后，
+    // 绿线在两种底色上都立得住。
     final haloPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.2
-      ..color = Colors.white.withValues(alpha: 0.9);
+      ..color = haloOnCanvas(background);
     final framePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6

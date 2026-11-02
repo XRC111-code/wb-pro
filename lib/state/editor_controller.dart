@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../model/canvas_style.dart';
 import '../model/element.dart';
 import '../model/geometry.dart';
 import '../model/text_metrics.dart';
@@ -108,6 +109,7 @@ class EditorController extends ChangeNotifier {
   Set<String> _selection = <String>{};
   ToolKind _tool = ToolKind.select;
   DrawStyle _style = const DrawStyle();
+  Color _canvasColor = kCanvasPaper;
   String _name = '未命名白板';
   String? _filePath;
   bool _dirty = false;
@@ -119,6 +121,7 @@ class EditorController extends ChangeNotifier {
   Set<String> get selection => _selection;
   ToolKind get tool => _tool;
   DrawStyle get style => _style;
+  Color get canvasColor => _canvasColor;
   String get name => _name;
   String? get filePath => _filePath;
   bool get dirty => _dirty;
@@ -195,6 +198,23 @@ class EditorController extends ChangeNotifier {
 
   void setStyle(DrawStyle value) {
     _style = value;
+    notifyListeners();
+  }
+
+  /// 换画布底色。
+  ///
+  /// 只调整「下一次新建」的笔色，不动已经画好的内容。自动把全篇线条翻面
+  /// 看起来聪明，实际上是在改用户明确选过的颜色 —— 他可能就是想要一条深色
+  /// 线压在深色底上做层次。
+  ///
+  /// [markDirty] 给「用主题色初始化空白文档」用：那次换色不是用户的编辑，
+  /// 不该让新文档一打开就带着未保存标记。
+  void setCanvasColor(Color value, {bool markDirty = true}) {
+    final next = value.withValues(alpha: 1);
+    if (_canvasColor.toARGB32() == next.toARGB32()) return;
+    _canvasColor = next;
+    _style = _style.copyWith(stroke: readableInk(_style.stroke, next));
+    if (markDirty) _dirty = true;
     notifyListeners();
   }
 
@@ -809,7 +829,9 @@ class EditorController extends ChangeNotifier {
     final frame = Rect.fromLTWH(
       _snap(at).dx,
       _snap(at).dy,
-      math.max(40, size.width + 4),
+      // 空文本框也要有 320 的编辑宽度。按空串量出来只有 40，输入第一句话
+      // 就会在光标旁边一个字一个字折行，看起来像出了 bug。
+      math.max(320, size.width + 4),
       math.max(_style.fontSize * 1.4, size.height),
     );
     return TextElement(
@@ -866,19 +888,27 @@ class EditorController extends ChangeNotifier {
     String? filePath,
     Offset? pan,
     double? zoom,
+    Color? canvasColor,
   }) {
     _elements = List<WbElement>.unmodifiable(elements);
     _selection = <String>{};
     _name = name;
     _filePath = filePath;
     _dirty = false;
+    _canvasColor = (canvasColor ?? kCanvasPaper).withValues(alpha: 1);
+    // 打开一份深色文档后，默认笔色必须跟着翻面，否则第一次落笔什么都看不见。
+    _style = _style.copyWith(stroke: readableInk(_style.stroke, _canvasColor));
     history.clear();
     if (pan != null && zoom != null) viewport.restore(pan, zoom);
     notifyListeners();
   }
 
-  void newDocument() {
-    loadDocument(name: '未命名白板', elements: const <WbElement>[]);
+  void newDocument({Color? canvasColor}) {
+    loadDocument(
+      name: '未命名白板',
+      elements: const <WbElement>[],
+      canvasColor: canvasColor,
+    );
   }
 
   @override

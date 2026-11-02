@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wb_pro/io/document.dart';
+import 'package:wb_pro/model/canvas_style.dart';
 import 'package:wb_pro/model/element.dart';
 
 const Color _black = Color(0xFF1F2933);
@@ -45,6 +46,53 @@ void main() {
       expect(json['format'], WbDocument.formatId);
       expect(json['version'], WbDocument.formatVersion);
       expect(json['createdAt'], isA<String>());
+    });
+  });
+
+  group('画布底色', () {
+    test('深色画布往返后仍是同一个颜色', () {
+      const document = WbDocument(
+        name: '夜景',
+        elements: <WbElement>[],
+        canvasColor: kCanvasInk,
+      );
+      final result = WbDocument.decode(document.encode());
+      expect(result.document.canvasColor.toARGB32(), kCanvasInk.toARGB32());
+      expect(result.warnings, isEmpty);
+    });
+
+    test('旧文档没有 canvas 字段时回落纸白', () {
+      final result = WbDocument.decode('{"format":"wb-pro","version":1,"elements":[]}');
+      expect(result.document.canvasColor.toARGB32(), kCanvasPaper.toARGB32());
+      // 缺字段属于正常情况，不该弹「部分内容无法显示」。
+      expect(result.hasWarnings, isFalse);
+    });
+
+    test('颜色类型不对或越界时回落，不报警告', () {
+      for (final raw in <String>[
+        '{"canvas":{"color":"#fff"},"elements":[]}',
+        '{"canvas":{"color":-1},"elements":[]}',
+        '{"canvas":{"color":99999999999},"elements":[]}',
+        '{"canvas":"dark","elements":[]}',
+      ]) {
+        final result = WbDocument.decode(raw);
+        expect(result.document.canvasColor.toARGB32(), kCanvasPaper.toARGB32());
+        expect(result.hasWarnings, isFalse);
+      }
+    });
+
+    test('半透明底色被还原成不透明', () {
+      // 0x80FFFFFF：白色但 alpha 只有一半。半透明画布会让同一份文档在
+      // 深浅色界面里长得不一样，读入时就归一。
+      final result = WbDocument.decode('{"canvas":{"color":2164260863},"elements":[]}');
+      expect(result.document.canvasColor.a, 1.0);
+      expect(result.document.canvasColor.toARGB32(), 0xFFFFFFFF);
+    });
+
+    test('编码里带版本 2', () {
+      final json = const WbDocument(name: 'x', elements: <WbElement>[]).toJson();
+      expect(json['version'], 2);
+      expect((json['canvas'] as Map)['color'], kCanvasPaper.toARGB32());
     });
   });
 

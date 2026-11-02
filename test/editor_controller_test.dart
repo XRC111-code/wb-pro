@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wb_pro/model/canvas_style.dart';
 import 'package:wb_pro/model/element.dart';
 import 'package:wb_pro/state/editor_controller.dart';
 
@@ -26,6 +27,69 @@ WbElement _shape(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('画布底色', () {
+    test('切到深色画布后默认笔色翻成浅色', () {
+      final controller = EditorController();
+      expect(controller.canvasColor.toARGB32(), kCanvasPaper.toARGB32());
+      expect(controller.dirty, isFalse);
+
+      controller.setCanvasColor(kCanvasInk);
+      expect(controller.canvasColor.toARGB32(), kCanvasInk.toARGB32());
+      expect(controller.dirty, isTrue);
+      // 深墨笔落在墨黑底上等于没画，必须换一面。
+      expect(isVisibleOn(controller.style.stroke, kCanvasInk), isTrue);
+      expect(controller.style.stroke.computeLuminance(), greaterThan(0.5));
+      controller.dispose();
+    });
+
+    test('切回浅色画布时笔色也翻回来', () {
+      final controller = EditorController();
+      controller.setCanvasColor(kCanvasInk);
+      controller.setCanvasColor(kCanvasPaper);
+      expect(controller.style.stroke.computeLuminance(), lessThan(0.2));
+      controller.dispose();
+    });
+
+    test('已经在画布上的元素不会被顺手改色', () {
+      final controller = EditorController();
+      controller.addElement(_shape('a'));
+      final before = (controller.elements.single as ShapeElement).stroke;
+      controller.setCanvasColor(kCanvasInk);
+      final after = (controller.elements.single as ShapeElement).stroke;
+      expect(after.toARGB32(), before.toARGB32());
+      controller.dispose();
+    });
+
+    test('自定义笔色只要还看得清就保留', () {
+      final controller = EditorController();
+      const red = Color(0xFFE03131);
+      controller.setStyle(controller.style.copyWith(stroke: red));
+      controller.setCanvasColor(kCanvasInk);
+      expect(controller.style.stroke.toARGB32(), red.toARGB32());
+      controller.dispose();
+    });
+
+    test('初始化底色不标脏', () {
+      final controller = EditorController();
+      controller.setCanvasColor(kCanvasInk, markDirty: false);
+      expect(controller.dirty, isFalse);
+      controller.dispose();
+    });
+
+    test('打开文档时恢复底色并调整笔色', () {
+      final controller = EditorController();
+      controller.loadDocument(
+        name: '夜景',
+        elements: const <WbElement>[],
+        canvasColor: kCanvasInk,
+      );
+      expect(controller.canvasColor.toARGB32(), kCanvasInk.toARGB32());
+      expect(isVisibleOn(controller.style.stroke, kCanvasInk), isTrue);
+      expect(controller.dirty, isFalse);
+      controller.dispose();
+    });
+  });
 
   group('增删与历史', () {
     test('添加元素后可撤销', () {

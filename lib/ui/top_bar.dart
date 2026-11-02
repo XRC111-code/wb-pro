@@ -10,7 +10,7 @@ import 'widgets.dart';
 ///
 /// 没有顶栏条。一条 52px 高的实色横条会横贯整个画布上沿，看起来像给窗口
 /// 戴了个帽子；改成两块各自独立的小浮层之后，画布从第一条像素就是画布。
-class TopBar extends StatelessWidget {
+class TopBar extends StatefulWidget {
   const TopBar({
     super.key,
     required this.controller,
@@ -21,6 +21,20 @@ class TopBar extends StatelessWidget {
   final EditorController controller;
   final WbActions actions;
   final bool compact;
+
+  @override
+  State<TopBar> createState() => _TopBarState();
+}
+
+class _TopBarState extends State<TopBar> {
+  /// 菜单由 Material 的 [MenuAnchor] 承载：它自带键盘导航、屏幕内翻转和
+  /// 级联子菜单。`PopupMenuButton` 在 768 高的窗口里放不下二十多项，
+  /// 最后几项会直接落在屏幕外点不到。
+  final MenuController _menu = MenuController();
+
+  EditorController get controller => widget.controller;
+  WbActions get actions => widget.actions;
+  bool get compact => widget.compact;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +138,7 @@ class TopBar extends StatelessWidget {
             ),
           ],
           _separator(context),
-          _menu(context),
+          _buildMenu(context),
         ],
       ),
     );
@@ -137,20 +151,110 @@ class TopBar extends StatelessWidget {
         color: WbTheme.chromeHairline(context),
       );
 
-  Widget _menu(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: '菜单',
-      icon: MiuixIcon(
+  Widget _buildMenu(BuildContext context) {
+    return MenuAnchor(
+      controller: _menu,
+      style: _menuStyle(context),
+      // 和按钮下沿留 6px：菜单紧贴按钮时，第一项看起来像是按钮的一部分。
+      alignmentOffset: const Offset(0, 6),
+      menuChildren: _menuChildren(context),
+      builder: (context, menuController, child) => WbIconButton(
         icon: Icons.menu,
-        size: 18,
-        tint: WbTheme.onChrome(context, alpha: 0.82),
+        // 这里故意不挂 tooltip：点开菜单后鼠标正好停在这个按钮上，气泡会
+        // 在 420ms 后弹出来压住菜单第一项。菜单图标本身不需要解释。
+        tooltip: '',
+        onPressed: () =>
+            menuController.isOpen ? menuController.close() : menuController.open(),
       ),
-      constraints: const BoxConstraints(minWidth: 246),
-      position: PopupMenuPosition.under,
-      onSelected: (value) => _handleMenu(context, value),
-      itemBuilder: (context) => _menuItems(context),
     );
   }
+
+  MenuStyle _menuStyle(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return MenuStyle(
+      backgroundColor: WidgetStatePropertyAll(WbTheme.panelColor(context)),
+      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+      elevation: const WidgetStatePropertyAll(10),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      ),
+      minimumSize: const WidgetStatePropertyAll(Size(238, 0)),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      side: WidgetStatePropertyAll(BorderSide(
+        color: dark
+            ? Colors.white.withValues(alpha: 0.07)
+            : Colors.black.withValues(alpha: 0.06),
+      )),
+    );
+  }
+
+  ButtonStyle _itemStyle(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return ButtonStyle(
+      minimumSize: const WidgetStatePropertyAll(Size(0, 34)),
+      padding:
+          const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8)),
+      foregroundColor:
+          WidgetStatePropertyAll(Theme.of(context).colorScheme.onSurface),
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.focused) ||
+            states.contains(WidgetState.pressed)) {
+          return dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05);
+        }
+        return Colors.transparent;
+      }),
+    );
+  }
+
+  /// 一项菜单。动作执行完立刻收起菜单 —— 菜单里点「导出 PNG」之后菜单还
+  /// 浮在文件对话框上面，是最容易漏掉的一步。
+  Widget _menuButton(
+    BuildContext context, {
+    required String value,
+    required IconData icon,
+    required String label,
+    String? shortcut,
+    bool enabled = true,
+    bool danger = false,
+  }) {
+    final subtle = WbTheme.subtleText(context);
+    final color = !enabled
+        ? subtle.withValues(alpha: 0.4)
+        : (danger
+            ? const Color(0xFFE03131)
+            : Theme.of(context).colorScheme.onSurface);
+    return MenuItemButton(
+      onPressed: enabled
+          ? () {
+              _menu.close();
+              _handleMenu(context, value);
+            }
+          : null,
+      style: _itemStyle(context),
+      leadingIcon: MiuixIcon(icon: icon, size: 16, tint: color),
+      trailingIcon: shortcut == null
+          ? null
+          : Text(shortcut, style: TextStyle(fontSize: 11, color: subtle)),
+      child: Text(label, style: TextStyle(fontSize: 13, color: color)),
+    );
+  }
+
+  Widget _menuDivider(BuildContext context) => Divider(
+        height: 9,
+        thickness: 1,
+        indent: 8,
+        endIndent: 8,
+        color: WbTheme.hairline(context),
+      );
 
   void _handleMenu(BuildContext context, String value) {
     switch (value) {
@@ -192,16 +296,10 @@ class TopBar extends StatelessWidget {
         actions.toggleGrid();
       case 'snap':
         actions.toggleSnap();
+      case 'canvas':
+        actions.chooseCanvasColor();
       case 'inspector':
         actions.toggleInspector();
-      case 'zoomIn':
-        actions.zoomIn();
-      case 'zoomOut':
-        actions.zoomOut();
-      case 'zoomReset':
-        actions.zoomReset();
-      case 'fit':
-        actions.zoomToFit();
       case 'theme':
         actions.toggleTheme();
       case 'shortcuts':
@@ -211,84 +309,85 @@ class TopBar extends StatelessWidget {
     }
   }
 
-  List<PopupMenuEntry<String>> _menuItems(BuildContext context) {
-    final subtle = WbTheme.subtleText(context);
-    PopupMenuItem<String> item(
-      String value,
-      IconData icon,
-      String label, {
-      String? shortcut,
-      bool enabled = true,
-      bool danger = false,
-    }) {
-      final color = enabled
-          ? (danger
-              ? const Color(0xFFE03131)
-              : Theme.of(context).colorScheme.onSurface)
-          : subtle.withValues(alpha: 0.4);
-      return PopupMenuItem<String>(
-        value: value,
-        height: 38,
-        enabled: enabled,
-        child: Row(
-          children: <Widget>[
-            MiuixIcon(icon: icon, size: 16, tint: color),
-            const SizedBox(width: 10),
-            Expanded(
-              child: MiuixText(label,
-                  style: const TextStyle(fontSize: 13), color: color),
-            ),
-            if (shortcut != null)
-              MiuixText(
-                shortcut,
-                style: const TextStyle(fontSize: 11),
-                color: subtle,
-              ),
-          ],
-        ),
-      );
-    }
-
+  /// 菜单结构按「文件 / 编辑 / 视图与帮助」分三段。
+  ///
+  /// 视图相关的七项收进子菜单：主菜单二十多项在 768 高的窗口里会溢出，
+  /// 最后几项落在屏幕外，鼠标够不到、键盘也得按好几次才滚动过去。
+  List<Widget> _menuChildren(BuildContext context) {
     final hasSelection = controller.selection.isNotEmpty;
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final subtle = WbTheme.subtleText(context);
 
-    return <PopupMenuEntry<String>>[
-      item('new', Icons.note_add_outlined, '新建', shortcut: 'Ctrl+N'),
-      item('open', Icons.folder_open_outlined, '打开…', shortcut: 'Ctrl+O'),
-      item('save', Icons.save_outlined, '保存', shortcut: 'Ctrl+S'),
-      item('saveAs', Icons.save_as_outlined, '另存为…', shortcut: 'Ctrl+Shift+S'),
-      const PopupMenuDivider(),
-      item('png', Icons.image_outlined, '导出 PNG…', shortcut: 'Ctrl+E'),
-      item('svg', Icons.timeline, '导出 SVG…'),
-      item('image', Icons.add_photo_alternate_outlined, '插入图片…'),
-      const PopupMenuDivider(),
-      item('undo', Icons.undo, '撤销',
-          shortcut: 'Ctrl+Z', enabled: controller.canUndo),
-      item('redo', Icons.redo, '重做',
-          shortcut: 'Ctrl+Shift+Z', enabled: controller.canRedo),
-      item('cut', Icons.content_cut, '剪切',
-          shortcut: 'Ctrl+X', enabled: hasSelection),
-      item('copy', Icons.content_copy, '复制',
-          shortcut: 'Ctrl+C', enabled: hasSelection),
-      item('paste', Icons.content_paste, '粘贴', shortcut: 'Ctrl+V'),
-      item('duplicate', Icons.copy_all_outlined, '创建副本',
-          shortcut: 'Ctrl+D', enabled: hasSelection),
-      item('delete', Icons.delete_outline, '删除',
-          shortcut: 'Del', enabled: hasSelection, danger: true),
-      item('selectAll', Icons.select_all, '全选', shortcut: 'Ctrl+A'),
-      const PopupMenuDivider(),
-      item('grid', Icons.grid_on, controller.showGrid ? '隐藏网格' : '显示网格',
-          shortcut: 'Ctrl+G'),
-      item('snap', Icons.straighten, controller.snapToGrid ? '关闭吸附' : '吸附到网格',
-          shortcut: 'Ctrl+Shift+G'),
-      item('inspector', Icons.tune, '属性面板', shortcut: 'Ctrl+Alt+P'),
-      // 放大 / 缩小 / 实际大小 / 适应内容 不放进菜单：右下角一直摆着这几个
-      // 按钮，菜单再列一遍只会把它顶到屏幕外面去。
-      const PopupMenuDivider(),
-      item('theme', dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-          dark ? '浅色主题' : '深色主题'),
-      item('shortcuts', Icons.keyboard_outlined, '快捷键', shortcut: '?'),
-      item('about', Icons.info_outline, '关于 wb-pro'),
+    return <Widget>[
+      _menuButton(context, value: 'new', icon: Icons.note_add_outlined, label: '新建', shortcut: 'Ctrl+N'),
+      _menuButton(context, value: 'open', icon: Icons.folder_open_outlined, label: '打开…', shortcut: 'Ctrl+O'),
+      _menuButton(context, value: 'save', icon: Icons.save_outlined, label: '保存', shortcut: 'Ctrl+S'),
+      _menuButton(context, value: 'saveAs', icon: Icons.save_as_outlined, label: '另存为…', shortcut: 'Ctrl+Shift+S'),
+      _menuDivider(context),
+      _menuButton(context, value: 'png', icon: Icons.image_outlined, label: '导出 PNG…', shortcut: 'Ctrl+E'),
+      _menuButton(context, value: 'svg', icon: Icons.timeline, label: '导出 SVG…'),
+      _menuButton(context, value: 'image', icon: Icons.add_photo_alternate_outlined, label: '插入图片…'),
+      _menuDivider(context),
+      _menuButton(context, value: 'undo', icon: Icons.undo, label: '撤销', shortcut: 'Ctrl+Z', enabled: controller.canUndo),
+      _menuButton(context, value: 'redo', icon: Icons.redo, label: '重做', shortcut: 'Ctrl+Shift+Z', enabled: controller.canRedo),
+      _menuButton(context, value: 'cut', icon: Icons.content_cut, label: '剪切', shortcut: 'Ctrl+X', enabled: hasSelection),
+      _menuButton(context, value: 'copy', icon: Icons.content_copy, label: '复制', shortcut: 'Ctrl+C', enabled: hasSelection),
+      _menuButton(context, value: 'paste', icon: Icons.content_paste, label: '粘贴', shortcut: 'Ctrl+V'),
+      _menuButton(context, value: 'duplicate', icon: Icons.copy_all_outlined, label: '创建副本', shortcut: 'Ctrl+D', enabled: hasSelection),
+      _menuButton(context, value: 'delete', icon: Icons.delete_outline, label: '删除', shortcut: 'Del', enabled: hasSelection, danger: true),
+      _menuButton(context, value: 'selectAll', icon: Icons.select_all, label: '全选', shortcut: 'Ctrl+A'),
+      _menuDivider(context),
+      SubmenuButton(
+        style: _itemStyle(context),
+        menuStyle: _menuStyle(context),
+        leadingIcon: MiuixIcon(
+          icon: Icons.tune,
+          size: 16,
+          tint: Theme.of(context).colorScheme.onSurface,
+        ),
+        trailingIcon: Icon(Icons.chevron_right, size: 15, color: subtle),
+        menuChildren: <Widget>[
+          _menuButton(
+            context,
+            value: 'grid',
+            icon: Icons.grid_on,
+            label: controller.showGrid ? '隐藏网格' : '显示网格',
+            shortcut: 'Ctrl+G',
+          ),
+          _menuButton(
+            context,
+            value: 'snap',
+            icon: Icons.straighten,
+            label: controller.snapToGrid ? '关闭吸附' : '吸附到网格',
+            shortcut: 'Ctrl+Shift+G',
+          ),
+          _menuButton(
+            context,
+            value: 'canvas',
+            icon: Icons.palette_outlined,
+            label: '画布底色…',
+          ),
+          _menuButton(
+            context,
+            value: 'inspector',
+            icon: Icons.view_sidebar_outlined,
+            label: '属性面板',
+            shortcut: 'Ctrl+Alt+P',
+          ),
+          _menuDivider(context),
+          // 放大 / 缩小 / 实际大小 / 适应内容 不放进菜单：右下角一直摆着这几个
+          // 按钮，菜单再列一遍只会把它顶到屏幕外面去。
+          _menuButton(
+            context,
+            value: 'theme',
+            icon: dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            label: dark ? '浅色主题' : '深色主题',
+          ),
+          _menuButton(context, value: 'shortcuts', icon: Icons.keyboard_outlined, label: '快捷键', shortcut: '?'),
+          _menuButton(context, value: 'about', icon: Icons.info_outline, label: '关于 wb-pro'),
+        ],
+        child: const Text('视图与帮助', style: TextStyle(fontSize: 13)),
+      ),
     ];
   }
 

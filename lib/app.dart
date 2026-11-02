@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_miuix/miuix.dart';
 
+import 'model/canvas_style.dart';
 import 'ui/home_page.dart';
 import 'ui/theme.dart';
 
@@ -40,7 +41,12 @@ class _WbAppState extends State<WbApp> {
           ),
         );
       },
-      home: HomePage(onToggleTheme: _toggleTheme),
+      home: HomePage(
+        onToggleTheme: _toggleTheme,
+        // 首启的空白文档用和界面一致的底色。深色界面配一张白纸，一打开就
+        // 像没加载完；之后这块底色归文档所有，切主题不再跟着变。
+        initialCanvasColor: _mode == ThemeMode.dark ? kCanvasInk : kCanvasPaper,
+      ),
     );
   }
 }
