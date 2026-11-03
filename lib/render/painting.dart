@@ -5,8 +5,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 
 import '../model/element.dart';
+import '../model/ink.dart';
 import '../model/text_metrics.dart';
 import '../util/color_utils.dart';
+import '../model/rough.dart';
 
 /// 把路径切成虚线。
 ///
@@ -97,6 +99,28 @@ void paintElement(Canvas canvas, WbElement element) {
 
 void _paintStroke(Canvas canvas, StrokeElement stroke) {
   if (stroke.points.isEmpty) return;
+  if (stroke.hasPressure) {
+    // 有压感时画的是填充轮廓，不是描边：粗细沿笔画变化，一条 stroke 做
+    // 不到。两端各补一个圆盖，否则轮廓的起止是平的，看着像被切了一刀。
+    final paint = _fillPaint(stroke.color, stroke.opacity);
+    canvas.drawPath(
+      inkOutlinePath(stroke.points, stroke.pressures, stroke.strokeWidth),
+      paint,
+    );
+    final last = stroke.points.length - 1;
+    // 半径多给 0.15：轮廓边缘和圆盖之间不能有肉眼可见的缝。
+    canvas.drawCircle(
+      stroke.points.first,
+      inkCapRadius(stroke.pressures, 0, stroke.strokeWidth) + 0.15,
+      paint,
+    );
+    canvas.drawCircle(
+      stroke.points.last,
+      inkCapRadius(stroke.pressures, last, stroke.strokeWidth) + 0.15,
+      paint,
+    );
+    return;
+  }
   final paint = _strokePaint(stroke.color, stroke.strokeWidth, stroke.opacity);
   if (stroke.points.length == 1) {
     canvas.drawCircle(
@@ -110,18 +134,47 @@ void _paintStroke(Canvas canvas, StrokeElement stroke) {
 }
 
 void _paintShape(Canvas canvas, ShapeElement shape) {
-  final path = shape.localPath();
   if (shape.fill != null) {
-    canvas.drawPath(path, _fillPaint(shape.fill!, shape.opacity));
+    // 填充用原始几何路径。抖动的边界加上实心填充，边缘会出现细小的锯齿状
+    // 色带，反而显得脏。
+    canvas.drawPath(shape.localPath(), _fillPaint(shape.fill!, shape.opacity));
   }
   _paintOutline(
     canvas,
-    path,
+    outlinePathOf(shape),
     shape.stroke,
     shape.strokeWidth,
     shape.strokeStyle,
     shape.opacity,
   );
+}
+
+/// 形状的描边路径。手绘风格时返回两条抖动曲线叠加的结果。
+///
+/// 抖动幅度见 [kRoughAmplitude]。
+Path outlinePathOf(ShapeElement shape) {
+  if (shape.roughness <= 0) return shape.localPath();
+  final frame = shape.frame;
+  final key = '${shape.id}|${frame.left.round()},${frame.top.round()},'
+      '${frame.width.round()},${frame.height.round()}|'
+      '${shape.roughness.toStringAsFixed(2)}|${shape.seed}|'
+      '${shape.cornerRadius.toStringAsFixed(1)}|${shape.shape.name}';
+  return RoughPathCache.resolve(key, () {
+    final base = shape.localPath();
+    final amplitude = kRoughAmplitude * shape.roughness;
+    final path = Path();
+    path.addPath(
+      smoothClosedPath(roughOutline(base, seed: shape.seed, amplitude: amplitude)),
+      Offset.zero,
+    );
+    path.addPath(
+      smoothClosedPath(
+        roughOutline(base, seed: shape.seed + 977, amplitude: amplitude * 0.72),
+      ),
+      Offset.zero,
+    );
+    return path;
+  });
 }
 
 void _paintArrow(Canvas canvas, ArrowElement arrow) {
@@ -363,6 +416,7 @@ void paintGrid(
 void paintScene(Canvas canvas, List<WbElement> elements, Rect visibleWorld) {
   final cull = visibleWorld.inflate(80);
   for (final element in elements) {
+    if (!element.visible) continue;
     if (!element.worldBounds.overlaps(cull)) continue;
     paintElement(canvas, element);
   }

@@ -1,7 +1,7 @@
 name: wb_pro
 description: "wb-pro —— 跨平台无限画布白板。手绘、形状、箭头、文本、便签、图片，miuix 界面、内置 HarmonyOS Sans 字体，支持 .wbpro 文档、PNG/SVG 导出与自动保存。"
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.3.0+4
 
 environment:
   sdk: '>=3.6.0 <4.0.0'

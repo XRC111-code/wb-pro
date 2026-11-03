@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -39,6 +40,36 @@ void main() {
       final result = WbDocument.decode(document.encode());
       expect(result.document.elements, isEmpty);
       expect(result.document.name, '空白');
+    });
+
+    test('隐藏与锁定随文档保存', () {
+      final hidden = _shape('h').copyWith(visible: false);
+      final locked = _shape('l', x: 100).copyWith(locked: true);
+      final document = WbDocument(name: 'x', elements: <WbElement>[hidden, locked]);
+      final result = WbDocument.decode(document.encode());
+
+      expect(result.document.elements[0].visible, isFalse);
+      expect(result.document.elements[0].locked, isFalse);
+      expect(result.document.elements[1].locked, isTrue);
+      expect(result.document.elements[1].visible, isTrue);
+    });
+
+    test('旧文档没有可见字段时默认显示', () {
+      final json = const WbDocument(name: 'x', elements: <WbElement>[]).toJson();
+      json['elements'] = <Object?>[
+        <String, Object?>{
+          'type': 'shape',
+          'id': 'a',
+          'x': 0,
+          'y': 0,
+          'w': 100,
+          'h': 60,
+          'shape': 'rectangle',
+        },
+      ];
+      final result = WbDocument.decode(jsonEncode(json));
+      expect(result.document.elements.single.visible, isTrue);
+      expect(result.document.elements.single.locked, isFalse);
     });
 
     test('编码结果带格式标识与版本', () {

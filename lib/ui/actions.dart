@@ -19,6 +19,7 @@ class WbActions {
     required this.showAbout,
     required this.toggleTheme,
     required this.toggleInspector,
+    required this.toggleLayers,
     required this.clearCanvas,
     required this.copySelection,
     required this.cutSelection,
@@ -34,6 +35,7 @@ class WbActions {
     required this.zoomToFit,
     required this.toggleGrid,
     required this.toggleSnap,
+    required this.toggleGuides,
     required this.chooseCanvasColor,
   });
 
@@ -49,6 +51,7 @@ class WbActions {
   final VoidCallback showAbout;
   final VoidCallback toggleTheme;
   final VoidCallback toggleInspector;
+  final VoidCallback toggleLayers;
   final VoidCallback clearCanvas;
   final VoidCallback copySelection;
   final VoidCallback cutSelection;
@@ -64,5 +67,6 @@ class WbActions {
   final VoidCallback zoomToFit;
   final VoidCallback toggleGrid;
   final VoidCallback toggleSnap;
+  final VoidCallback toggleGuides;
   final VoidCallback chooseCanvasColor;
 }

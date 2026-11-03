@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../model/canvas_style.dart';
 import '../model/element.dart';
 import '../model/geometry.dart';
+import '../model/snap_guides.dart';
 import '../model/text_metrics.dart';
 import '../util/id.dart';
 import 'history.dart';
@@ -62,6 +63,7 @@ class DrawStyle {
     this.fontSize = 24,
     this.cornerRadius = 12,
     this.noteColor = const Color(0xFFFFE08A),
+    this.roughness = 0,
   });
 
   final Color stroke;
@@ -72,6 +74,9 @@ class DrawStyle {
   final double cornerRadius;
   final Color noteColor;
 
+  /// 手绘强度。0 是几何描边，1 左右是「马克笔手绘」。
+  final double roughness;
+
   DrawStyle copyWith({
     Color? stroke,
     Color? fill,
@@ -81,6 +86,7 @@ class DrawStyle {
     double? fontSize,
     double? cornerRadius,
     Color? noteColor,
+    double? roughness,
   }) =>
       DrawStyle(
         stroke: stroke ?? this.stroke,
@@ -90,6 +96,7 @@ class DrawStyle {
         fontSize: fontSize ?? this.fontSize,
         cornerRadius: cornerRadius ?? this.cornerRadius,
         noteColor: noteColor ?? this.noteColor,
+        roughness: roughness ?? this.roughness,
       );
 }
 
@@ -115,7 +122,9 @@ class EditorController extends ChangeNotifier {
   bool _dirty = false;
   bool _showGrid = true;
   bool _snapToGrid = false;
+  bool _smartGuides = true;
   double _gridSize = 24;
+  List<SnapGuide> _guides = const <SnapGuide>[];
 
   List<WbElement> get elements => _elements;
   Set<String> get selection => _selection;
@@ -127,6 +136,10 @@ class EditorController extends ChangeNotifier {
   bool get dirty => _dirty;
   bool get showGrid => _showGrid;
   bool get snapToGrid => _snapToGrid;
+  bool get smartGuides => _smartGuides;
+
+  /// 当前正在显示的对齐参考线。拖拽结束后会被清空。
+  List<SnapGuide> get activeGuides => _guides;
   double get gridSize => _gridSize;
   final ValueNotifier<Offset?> pointerWorld = ValueNotifier<Offset?>(null);
 
@@ -188,6 +201,13 @@ class EditorController extends ChangeNotifier {
 
   void setSnapToGrid(bool value) {
     _snapToGrid = value;
+    notifyListeners();
+  }
+
+  void setSmartGuides(bool value) {
+    if (_smartGuides == value) return;
+    _smartGuides = value;
+    if (!value) _guides = const <SnapGuide>[];
     notifyListeners();
   }
 
@@ -380,7 +400,10 @@ class EditorController extends ChangeNotifier {
   // ── 选择 ───────────────────────────────────────────────────────────────────
 
   void selectAll() {
-    _selection = _elements.map((e) => e.id).toSet();
+    _selection = _elements
+        .where((e) => e.visible && !e.locked)
+        .map((e) => e.id)
+        .toSet();
     notifyListeners();
   }
 
@@ -413,22 +436,72 @@ class EditorController extends ChangeNotifier {
   /// [loose] 为 true（选择工具的用法）时，精确命中全部落空后会退一步接受
   /// 「点在元素内部」；橡皮擦要传 false —— 在空心矩形中间划一下就把整个
   /// 矩形删掉，不是「擦」该有的手感。
+  /// 命中测试。隐藏和锁定的元素会被跳过：看不见的东西不该点得中，锁定的
+  /// 东西点中了也没法动，两边都只会让人以为软件卡了。
   WbElement? hitTest(Offset world, {double tolerance = 4, bool loose = true}) {
+    bool pickable(WbElement e) => e.visible && !e.locked;
     for (var i = _elements.length - 1; i >= 0; i--) {
       final element = _elements[i];
+      if (!pickable(element)) continue;
       if (element.hitTest(world, tolerance: tolerance)) return element;
     }
     if (!loose) return null;
     // 一圈都没点中边线，再放宽到「点进内部也算」。没有这一遍，空心矩形
     // 只有边框能选中，触摸屏上等于点不到。
     for (var i = _elements.length - 1; i >= 0; i--) {
-      if (_elements[i].hitTestArea(world)) return _elements[i];
+      final element = _elements[i];
+      if (!pickable(element)) continue;
+      if (element.hitTestArea(world)) return element;
     }
     return null;
   }
 
   List<WbElement> hitTestRect(Rect world) {
-    return _elements.where((e) => e.worldBounds.overlaps(world)).toList(growable: false);
+    return _elements
+        .where((e) => e.visible && !e.locked && e.worldBounds.overlaps(world))
+        .toList(growable: false);
+  }
+
+  // ── 图层 ───────────────────────────────────────────────────────────────────
+
+  void setElementVisible(String id, bool value) {
+    final index = _elements.indexWhere((e) => e.id == id);
+    if (index < 0 || _elements[index].visible == value) return;
+    _record();
+    final next = List<WbElement>.of(_elements);
+    next[index] = next[index].copyWith(visible: value);
+    _elements = next;
+    // 藏起来的东西还留在选中集里，属性面板就会对着一个看不见的元素编辑。
+    if (!value) _selection = <String>{..._selection}..remove(id);
+    _dirty = true;
+    notifyListeners();
+  }
+
+  void setElementLocked(String id, bool value) {
+    final index = _elements.indexWhere((e) => e.id == id);
+    if (index < 0 || _elements[index].locked == value) return;
+    _record();
+    final next = List<WbElement>.of(_elements);
+    next[index] = next[index].copyWith(locked: value);
+    _elements = next;
+    // 锁定即解除选中：留着选中框，用户会以为还能拖。
+    if (value) _selection = <String>{..._selection}..remove(id);
+    _dirty = true;
+    notifyListeners();
+  }
+
+  /// 把元素从 [from] 挪到 [to]（下标都在当前列表里）。
+  void moveElement(int from, int to) {
+    if (from == to) return;
+    if (from < 0 || from >= _elements.length) return;
+    final target = to.clamp(0, _elements.length - 1);
+    _record();
+    final next = List<WbElement>.of(_elements);
+    final element = next.removeAt(from);
+    next.insert(target, element);
+    _elements = next;
+    _dirty = true;
+    notifyListeners();
   }
 
   // ── 层级 ───────────────────────────────────────────────────────────────────
@@ -571,6 +644,43 @@ class EditorController extends ChangeNotifier {
 
   // ── 移动 / 对齐 ────────────────────────────────────────────────────────────
 
+  /// 计算拖拽中的元素间吸附。
+  ///
+  /// [proposed] 是「完全不吸附时，选中的整体包围盒会落在哪」。返回还要补加
+  /// 的偏移和应当显示的参考线；参考线同时写进 [activeGuides]。
+  ///
+  /// 阈值按屏幕像素换算：`thresholdPx / zoom`。如果用世界单位，放大到 400%
+  /// 时 6 个单位只有 1.5 个屏幕像素，用户会觉得「怎么也对不齐」。
+  SnapResult snapSelection(
+    Rect proposed, {
+    double thresholdPx = 6,
+    Set<SnapEdge> edges = kAllSnapEdges,
+  }) {
+    if (!_smartGuides) {
+      _guides = const <SnapGuide>[];
+      return const SnapResult();
+    }
+    final targets = <Rect>[];
+    for (final e in _elements) {
+      if (_selection.contains(e.id)) continue;
+      targets.add(e.worldBounds);
+    }
+    final result = computeSnap(
+      moving: proposed,
+      targets: targets,
+      threshold: thresholdPx / viewport.zoom,
+      edges: edges,
+    );
+    _guides = result.guides;
+    return result;
+  }
+
+  void clearGuides() {
+    if (_guides.isEmpty) return;
+    _guides = const <SnapGuide>[];
+    notifyListeners();
+  }
+
   void nudgeSelection(Offset delta) {
     if (_selection.isEmpty) return;
     _record();
@@ -678,6 +788,7 @@ class EditorController extends ChangeNotifier {
     double? fontSize,
     double? cornerRadius,
     Color? noteColor,
+    double? roughness,
     bool record = true,
   }) {
     final nextStyle = _style.copyWith(
@@ -689,6 +800,7 @@ class EditorController extends ChangeNotifier {
       fontSize: fontSize,
       cornerRadius: cornerRadius,
       noteColor: noteColor,
+      roughness: roughness,
     );
     _style = nextStyle;
 
@@ -712,6 +824,12 @@ class EditorController extends ChangeNotifier {
             strokeWidth: strokeWidth ?? s.strokeWidth,
             strokeStyle: strokeStyle ?? s.strokeStyle,
             cornerRadius: cornerRadius ?? s.cornerRadius,
+            roughness: roughness ?? s.roughness,
+            // 从「几何」切到手绘时补一个种子：不补的话所有形状都用 0 号
+            // 噪声，抖动完全一样，一排矩形看起来像复制粘贴的。
+            seed: roughness != null && roughness > 0 && s.seed == 0
+                ? _nextSeed()
+                : null,
           ),
         ArrowElement a => a.copyWith(
             stroke: stroke ?? a.stroke,
@@ -798,11 +916,20 @@ class EditorController extends ChangeNotifier {
           strokeWidth: _style.strokeWidth,
           strokeStyle: _style.strokeStyle,
           cornerRadius: _style.cornerRadius,
+          roughness: _style.roughness,
+          // 种子跟着形状走：同一个形状无论重绘多少次，抖动都长一个样。
+          seed: _style.roughness > 0 ? _nextSeed() : 0,
         );
     }
   }
 
-  StrokeElement createStroke(List<Offset> worldPoints) {
+  int _seedCounter = 0;
+
+  /// 简单的递增种子，不用随机数：随机数会让「撤销后重做」得到的形状和
+  /// 原来长得不一样，虽然功能上没错，但看着像丢了一次编辑。
+  int _nextSeed() => (_seedCounter += 7919) & 0x7fffffff;
+
+  StrokeElement createStroke(List<Offset> worldPoints, {List<double>? pressures}) {
     final points = worldPoints.map(_snap).toList(growable: false);
     Rect bounds = Rect.fromCircle(center: points.first, radius: 0.5);
     for (final p in points) {
@@ -810,12 +937,22 @@ class EditorController extends ChangeNotifier {
     }
     final pad = _style.strokeWidth / 2 + 0.5;
     final frame = bounds.inflate(pad);
+
+    // 压力数组长度必须和点一一对应，否则宁可不存。设备没提供压感时上游
+    // 传 null，这里就退回等宽描边。
+    //
+    // 再加一道「全零」检查：有些平台会稳定上报 pressure = 0，长度对得上但
+    // 数值没有意义。存下来只会得到一条全程最细的线。
+    final usable = pressures != null &&
+        pressures.length == points.length &&
+        pressures.any((p) => p > 0.01);
     return StrokeElement(
       id: newId('el'),
       frame: frame,
       points: points.map((p) => p - frame.topLeft).toList(growable: false),
       color: _style.stroke,
       strokeWidth: _style.strokeWidth,
+      pressures: usable ? List<double>.unmodifiable(pressures) : const <double>[],
     );
   }
 

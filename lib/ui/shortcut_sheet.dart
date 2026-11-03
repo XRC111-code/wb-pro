@@ -53,6 +53,8 @@ const List<_Group> _shortcuts = <_Group>[
     _Shortcut('Shift+1', '适应内容'),
     _Shortcut('Ctrl+G', '显示/隐藏网格'),
     _Shortcut('Ctrl+Shift+G', '吸附到网格'),
+    _Shortcut('Ctrl+Shift+L', '图层面板'),
+    _Shortcut('Ctrl+Alt+P', '属性面板'),
     _Shortcut('空格拖动 / 中键拖动', '平移画布'),
     _Shortcut('Shift 拖拽', '绘制正方形 / 等比箭头'),
     _Shortcut('Shift 旋转', '按 15° 步进'),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wb_pro/app.dart';
 import 'package:wb_pro/model/canvas_style.dart';
 import 'package:wb_pro/ui/canvas_view.dart';
+import 'package:wb_pro/ui/layer_panel.dart';
 import 'package:wb_pro/ui/widgets.dart';
 
 Future<void> _pumpApp(WidgetTester tester) async {
@@ -189,6 +190,73 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     // 空文本元素在提交时会被删掉，所以最终是 0 个而不是 1 个。
     expect(find.text('0 个元素'), findsOneWidget);
+  });
+
+  testWidgets('拖动时出现对齐参考线', (tester) async {
+    await _pumpApp(tester);
+
+    // 上面一个矩形
+    await tester.tap(_toolButton('矩形  R'));
+    await tester.pumpAndSettle();
+    await tester.dragFrom(const Offset(300, 200), const Offset(200, 100));
+    await tester.pumpAndSettle();
+    // 下面一个矩形，左边缘对齐
+    await tester.dragFrom(const Offset(300, 520), const Offset(200, 100));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    // 按住上面那个，往下拖到和下面那个左边缘对齐的位置
+    final gesture = await tester.startGesture(const Offset(400, 250));
+    for (var i = 0; i < 6; i++) {
+      await gesture.moveBy(const Offset(0, 30));
+      await tester.pump();
+    }
+
+    final controller = tester
+        .widget<CanvasView>(find.byType(CanvasView))
+        .controller;
+    expect(controller.activeGuides, isNotEmpty);
+    final guide = controller.activeGuides.firstWhere((g) => g.vertical);
+    // 世界坐标的原点在视口中心，不能拿屏幕坐标当断言
+    final bottomLeft = controller.elements.last.worldBounds.left;
+    expect(guide.position, closeTo(bottomLeft, 0.5));
+    // 参考线必须覆盖两个元素的高度，而不是只盖住其中一个
+    expect(guide.to - guide.from, greaterThan(200));
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(controller.activeGuides, isEmpty);
+  });
+
+  testWidgets('图层面板可以打开并隐藏元素', (tester) async {
+    await _pumpApp(tester);
+
+    await tester.tap(_toolButton('矩形  R'));
+    await tester.pumpAndSettle();
+    await tester.dragFrom(const Offset(420, 300), const Offset(140, 90));
+    await tester.pumpAndSettle();
+    expect(find.text('1 个元素'), findsOneWidget);
+
+    // Ctrl+Shift+L
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LayerPanel), findsOneWidget);
+    expect(find.text('矩形'), findsWidgets);
+
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
+
+    // 再点一次恢复显示
+    await tester.tap(find.byIcon(Icons.visibility_off_outlined));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
   });
 
   testWidgets('窄屏切换到底部工具条', (tester) async {

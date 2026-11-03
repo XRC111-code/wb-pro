@@ -296,10 +296,14 @@ class _TopBarState extends State<TopBar> {
         actions.toggleGrid();
       case 'snap':
         actions.toggleSnap();
+      case 'guides':
+        actions.toggleGuides();
       case 'canvas':
         actions.chooseCanvasColor();
       case 'inspector':
         actions.toggleInspector();
+      case 'layers':
+        actions.toggleLayers();
       case 'theme':
         actions.toggleTheme();
       case 'shortcuts':
@@ -363,6 +367,12 @@ class _TopBarState extends State<TopBar> {
           ),
           _menuButton(
             context,
+            value: 'guides',
+            icon: Icons.align_horizontal_left,
+            label: controller.smartGuides ? '关闭智能参考线' : '开启智能参考线',
+          ),
+          _menuButton(
+            context,
             value: 'canvas',
             icon: Icons.palette_outlined,
             label: '画布底色…',
@@ -373,6 +383,13 @@ class _TopBarState extends State<TopBar> {
             icon: Icons.view_sidebar_outlined,
             label: '属性面板',
             shortcut: 'Ctrl+Alt+P',
+          ),
+          _menuButton(
+            context,
+            value: 'layers',
+            icon: Icons.layers_outlined,
+            label: '图层面板',
+            shortcut: 'Ctrl+Shift+L',
           ),
           _menuDivider(context),
           // 放大 / 缩小 / 实际大小 / 适应内容 不放进菜单：右下角一直摆着这几个

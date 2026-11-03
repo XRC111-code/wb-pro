@@ -46,6 +46,11 @@ double? cornerRadiusOf(WbElement element) => switch (element) {
       _ => null,
     };
 
+double? roughnessOf(WbElement element) => switch (element) {
+      ShapeElement e => e.roughness,
+      _ => null,
+    };
+
 /// 取第一个非空属性作为面板显示值。多选时元素属性可能各不相同，
 /// 显示「第一个」比显示「混合」更可用 —— 用户改一下就会全部统一。
 T? _firstOf<T>(List<WbElement> elements, T? Function(WbElement) read) {
@@ -109,6 +114,7 @@ class InspectorPanel extends StatelessWidget {
         final lineStyle = _firstOf(selected, strokeStyleOf) ?? style.strokeStyle;
         final fontSize = _firstOf(selected, fontSizeOf) ?? style.fontSize;
         final cornerRadius = _firstOf(selected, cornerRadiusOf) ?? style.cornerRadius;
+        final roughness = _firstOf(selected, roughnessOf) ?? style.roughness;
         final noteColor = _firstOf(selected, fillColorOf) ?? style.noteColor;
         final opacity = hasSelection ? selected.first.opacity : 1.0;
 
@@ -205,6 +211,23 @@ class InspectorPanel extends StatelessWidget {
                 onChangeEnd: (_) => controller.endGesture(),
                 onChanged: (value) =>
                     controller.applyStyle(cornerRadius: value, record: false),
+              ),
+            ),
+            _section(
+              context,
+              enabled: showRadius,
+              title: '手绘',
+              child: WbSliderRow(
+                label: '强度',
+                value: roughness.clamp(0, 2),
+                min: 0,
+                max: 2,
+                divisions: 8,
+                formatter: (v) => v < 0.05 ? '关闭' : v.toStringAsFixed(2),
+                onChangeStart: (_) => controller.beginGesture(),
+                onChangeEnd: (_) => controller.endGesture(),
+                onChanged: (value) =>
+                    controller.applyStyle(roughness: value, record: false),
               ),
             ),
             _section(

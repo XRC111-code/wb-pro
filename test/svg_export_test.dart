@@ -292,6 +292,74 @@ void main() {
     });
   });
 
+  group('压感笔迹', () {
+    StrokeElement ink({List<double> pressures = const <double>[]}) => StrokeElement(
+          id: 'k1',
+          frame: const Rect.fromLTWH(0, 0, 60, 10),
+          points: const <Offset>[
+            Offset(0, 0),
+            Offset(20, 5),
+            Offset(40, 0),
+            Offset(60, 5),
+          ],
+          color: _black,
+          strokeWidth: 8,
+          pressures: pressures,
+        );
+
+    test('有压力时输出填充轮廓和两个圆盖', () {
+      final svg = exportSvg(<WbElement>[ink(pressures: const <double>[1, 0.5, 0.8, 0.3])]);
+      expect(svg, contains('<path d="M'));
+      expect(svg, contains('<circle'));
+      expect(svg.contains('stroke-width="8"'), isFalse);
+    });
+
+    test('没有压力时保持等宽描边', () {
+      final svg = exportSvg(<WbElement>[ink()]);
+      expect(svg, contains('stroke-width="8"'));
+      expect(svg, contains('fill="none"'));
+    });
+  });
+
+  group('手绘风格', () {
+    ShapeElement rough({double roughness = 1, int seed = 5}) => ShapeElement(
+          id: 'r1',
+          frame: const Rect.fromLTWH(0, 0, 160, 90),
+          shape: ShapeKind.rectangle,
+          stroke: _black,
+          strokeWidth: 2,
+          fill: const Color(0xFFFFFFFF),
+          roughness: roughness,
+          seed: seed,
+        );
+
+    test('手绘形状输出抖动路径而不是 rect', () {
+      final svg = exportSvg(<WbElement>[rough()]);
+      expect(svg, contains('<path'));
+      // 填充仍然用几何形状，描边才是抖的
+      expect(svg, contains('<rect'));
+      expect(svg.contains('Q '), isTrue);
+    });
+
+    test('几何形状不输出 Q 命令', () {
+      final svg = exportSvg(<WbElement>[rough(roughness: 0)]);
+      expect(svg.contains('Q '), isFalse);
+      expect(svg, contains('<rect'));
+    });
+
+    test('同一个形状两次导出完全一致', () {
+      final a = exportSvg(<WbElement>[rough(seed: 11)]);
+      final b = exportSvg(<WbElement>[rough(seed: 11)]);
+      expect(a, b);
+    });
+
+    test('不同种子导出不同的抖动', () {
+      final a = exportSvg(<WbElement>[rough(seed: 1)]);
+      final b = exportSvg(<WbElement>[rough(seed: 2)]);
+      expect(a, isNot(b));
+    });
+  });
+
   group('网格', () {
     test('开启后输出点阵', () {
       final svg = exportSvg(

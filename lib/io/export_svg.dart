@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 
 import '../model/element.dart';
+import '../model/ink.dart';
+import '../model/rough.dart';
 import '../model/text_metrics.dart';
 import '../util/color_utils.dart';
 
@@ -114,6 +116,29 @@ String _strokeToSvg(StrokeElement e) {
     return buffer.toString();
   }
 
+  if (e.hasPressure) {
+    // 压感笔迹在画布上是填充轮廓；导出也必须是填充，否则粗细变化会丢。
+    // 两端的小圆盖单独补，和屏幕上那两个 drawCircle 一一对应。
+    final contour = inkContour(e.points, e.pressures, e.strokeWidth);
+    if (contour.length < 3) return buffer.toString();
+    final d = StringBuffer('M ${_n(left + contour.first.dx)} ${_n(top + contour.first.dy)}');
+    for (final p in contour.skip(1)) {
+      d.write(' L ${_n(left + p.dx)} ${_n(top + p.dy)}');
+    }
+    d.write(' Z');
+    buffer.writeln('    <path d="$d" fill="$color" fill-opacity="$alpha"/>');
+    final last = e.points.length - 1;
+    for (final index in <int>[0, last]) {
+      final p = e.points[index];
+      buffer.writeln(
+        '    <circle cx="${_n(left + p.dx)}" cy="${_n(top + p.dy)}" '
+        'r="${_n(inkCapRadius(e.pressures, index, e.strokeWidth) + 0.15)}" '
+        'fill="$color" fill-opacity="$alpha"/>',
+      );
+    }
+    return buffer.toString();
+  }
+
   buffer.writeln('    <path d="${_strokePathData(e, left, top)}" fill="none" '
       'stroke="$color" stroke-opacity="$alpha" stroke-width="${_n(e.strokeWidth)}" '
       'stroke-linecap="round" stroke-linejoin="round"/>');
@@ -145,7 +170,6 @@ String _strokePathData(StrokeElement e, double left, double top) {
 }
 
 String _shapeToSvg(ShapeElement e) {
-  final rect = e.frame;
   final buffer = StringBuffer();
   final fill = e.fill;
   final fillAttr = fill == null
@@ -153,18 +177,35 @@ String _shapeToSvg(ShapeElement e) {
       : 'fill="${_hex(fill)}" fill-opacity="${_n(fill.a * e.opacity)}"';
   final stroke = _strokeAttrs(e.stroke, e.strokeWidth, e.opacity, e.strokeStyle);
 
+  if (e.roughness > 0) {
+    // 和画布上完全一致：填充用原始几何，描边用抖动轮廓。反过来（抖动轮廓
+    // 填充）边缘会出现锯齿状的色带，屏幕上和导出结果都会显脏。
+    if (fill != null) {
+      buffer.writeln('    ${_shapeTag(e, fillAttr)}');
+    }
+    buffer.writeln('    <path d="${_roughPathData(e)}" fill="none" $stroke/>');
+    return buffer.toString();
+  }
+
+  buffer.writeln('    ${_shapeTag(e, '$fillAttr $stroke')}');
+  return buffer.toString();
+}
+
+/// 形状的几何标签。手绘模式下只拿来填色，所以属性是参数。
+String _shapeTag(ShapeElement e, String attrs) {
+  final rect = e.frame;
   switch (e.shape) {
     case ShapeKind.rectangle:
       final radius = math.min(
         e.cornerRadius,
         math.min(rect.width, rect.height) / 2,
       );
-      buffer.writeln('    <rect x="${_n(rect.left)}" y="${_n(rect.top)}" '
+      return '<rect x="${_n(rect.left)}" y="${_n(rect.top)}" '
           'width="${_n(rect.width)}" height="${_n(rect.height)}" '
-          'rx="${_n(radius)}" $fillAttr $stroke/>');
+          'rx="${_n(radius)}" $attrs/>';
     case ShapeKind.ellipse:
-      buffer.writeln('    <ellipse cx="${_n(rect.center.dx)}" cy="${_n(rect.center.dy)}" '
-          'rx="${_n(rect.width / 2)}" ry="${_n(rect.height / 2)}" $fillAttr $stroke/>');
+      return '<ellipse cx="${_n(rect.center.dx)}" cy="${_n(rect.center.dy)}" '
+          'rx="${_n(rect.width / 2)}" ry="${_n(rect.height / 2)}" $attrs/>';
     case ShapeKind.diamond:
       final points = <Offset>[
         Offset(rect.center.dx, rect.top),
@@ -172,9 +213,37 @@ String _shapeToSvg(ShapeElement e) {
         Offset(rect.center.dx, rect.bottom),
         Offset(rect.left, rect.center.dy),
       ].map((p) => '${_n(p.dx)},${_n(p.dy)}').join(' ');
-      buffer.writeln('    <polygon points="$points" $fillAttr $stroke/>');
+      return '<polygon points="$points" $attrs/>';
   }
-  return buffer.toString();
+}
+
+/// 手绘描边的 SVG 路径。两条抖动曲线用同一套采样点算法，和屏幕上
+/// `outlinePathOf` 的结果逐点对应 —— 导出不是「差不多」，是同一组数。
+String _roughPathData(ShapeElement e) {
+  final base = e.localPath();
+  final amplitude = kRoughAmplitude * e.roughness;
+  final buffer = StringBuffer();
+  final passes = <(int, double)>[
+    (e.seed, amplitude),
+    (e.seed + 977, amplitude * 0.72),
+  ];
+  for (final (seed, amp) in passes) {
+    final points = roughOutline(base, seed: seed, amplitude: amp);
+    if (points.length < 3) continue;
+    final n = points.length;
+    final startX = (points[0].dx + points[1].dx) / 2 + e.frame.left;
+    final startY = (points[0].dy + points[1].dy) / 2 + e.frame.top;
+    buffer.write('M ${_n(startX)} ${_n(startY)}');
+    for (var i = 1; i <= n; i++) {
+      final p = points[i % n];
+      final next = points[(i + 1) % n];
+      buffer.write(' Q ${_n(p.dx + e.frame.left)} ${_n(p.dy + e.frame.top)} '
+          '${_n((p.dx + next.dx) / 2 + e.frame.left)} '
+          '${_n((p.dy + next.dy) / 2 + e.frame.top)}');
+    }
+    buffer.write(' Z ');
+  }
+  return buffer.toString().trim();
 }
 
 String _arrowToSvg(ArrowElement e) {

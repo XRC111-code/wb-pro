@@ -46,6 +46,8 @@ sealed class WbElement {
     required this.frame,
     this.rotation = 0,
     this.opacity = 1,
+    this.visible = true,
+    this.locked = false,
   });
 
   final String id;
@@ -53,9 +55,24 @@ sealed class WbElement {
   final double rotation;
   final double opacity;
 
+  /// 是否显示。隐藏的元素不参与渲染，也不参与命中测试 —— 看不见却点得中，
+  /// 是白板里最容易让人怀疑「软件坏了」的情况。
+  final bool visible;
+
+  /// 是否锁定。锁定的元素照常显示，但点不中、框选不到：用来钉住背景图纸
+  /// 或参考线，避免拖别的东西时顺手把它们带跑。
+  final bool locked;
+
   ElementKind get kind;
 
-  WbElement copyWith({String? id, Rect? frame, double? rotation, double? opacity});
+  WbElement copyWith({
+    String? id,
+    Rect? frame,
+    double? rotation,
+    double? opacity,
+    bool? visible,
+    bool? locked,
+  });
 
   /// 本地坐标下的轮廓，用于绘制与填充命中。
   Path localPath();
@@ -115,6 +132,8 @@ sealed class WbElement {
         'h': frame.height,
         if (rotation != 0) 'rotation': rotation,
         if (opacity != 1) 'opacity': opacity,
+        if (!visible) 'visible': false,
+        if (locked) 'locked': true,
       };
 
   static WbElement fromJson(Map<String, Object?> json) {
@@ -156,14 +175,26 @@ class StrokeElement extends WbElement {
     required this.points,
     required this.color,
     required this.strokeWidth,
+    this.pressures = const <double>[],
     super.rotation,
     super.opacity,
+    super.visible,
+    super.locked,
   });
 
   /// 本地坐标（0..frame.width / 0..frame.height）。
   final List<Offset> points;
   final Color color;
   final double strokeWidth;
+
+  /// 每个采样点的压力（0..1），与 [points] 按下标对应。
+  ///
+  /// 空数组表示**没有压感数据**：鼠标、不支持压感的触屏、以及 1.2 之前的
+  /// 旧文档都走这条路，按等宽描边渲染。有数据才切成填充轮廓 —— 对没有
+  /// 压感的输入强行「模拟」出一个粗细变化，反而像渲染 bug。
+  final List<double> pressures;
+
+  bool get hasPressure => pressures.isNotEmpty && points.length > 1;
 
   @override
   ElementKind get kind => ElementKind.stroke;
@@ -214,9 +245,12 @@ class StrokeElement extends WbElement {
     Rect? frame,
     double? rotation,
     double? opacity,
+    bool? visible,
+    bool? locked,
     List<Offset>? points,
     Color? color,
     double? strokeWidth,
+    List<double>? pressures,
   }) =>
       StrokeElement(
         id: id ?? this.id,
@@ -224,8 +258,11 @@ class StrokeElement extends WbElement {
         points: points ?? this.points,
         color: color ?? this.color,
         strokeWidth: strokeWidth ?? this.strokeWidth,
+        pressures: pressures ?? this.pressures,
         rotation: rotation ?? this.rotation,
         opacity: opacity ?? this.opacity,
+        visible: visible ?? this.visible,
+        locked: locked ?? this.locked,
       );
 
   @override
@@ -248,6 +285,12 @@ class StrokeElement extends WbElement {
       ],
       'color': argbOf(color),
       'width': strokeWidth,
+      // 压力值直接存 0..3 位小数就够了；存满精度会让一条长笔迹的 JSON
+      // 膨胀一倍，而肉眼根本分不出千分之一粗细的差别。
+      if (pressures.isNotEmpty)
+        'pressures': <double>[
+          for (final p in pressures) double.parse(p.toStringAsFixed(3)),
+        ],
     });
 
   static StrokeElement fromJson(
@@ -264,14 +307,26 @@ class StrokeElement extends WbElement {
         points.add(Offset(_num(flat[i]), _num(flat[i + 1])));
       }
     }
+    final rawPressures = json['pressures'];
+    final pressures = <double>[];
+    if (rawPressures is List) {
+      for (final value in rawPressures) {
+        pressures.add(_num(value, 1).clamp(0.0, 1.0).toDouble());
+      }
+    }
     return StrokeElement(
       id: id,
       frame: frame,
       points: points,
       color: _color(json['color'], const Color(0xFF1F2933)),
       strokeWidth: math.max(_num(json['width'], 3), 0.5),
+      // 长度对不上说明文件被改过，宁可退回等宽也不要用错位的压力画出一条
+      // 粗细乱跳的线。
+      pressures: pressures.length == points.length ? pressures : const <double>[],
       rotation: rotation,
       opacity: opacity,
+      visible: _bool(json['visible'], true),
+      locked: _bool(json['locked']),
     );
   }
 }
@@ -288,8 +343,12 @@ class ShapeElement extends WbElement {
     this.fill,
     this.strokeStyle = StrokeStyle.solid,
     this.cornerRadius = 12,
+    this.roughness = 0,
+    this.seed = 0,
     super.rotation,
     super.opacity,
+    super.visible,
+    super.locked,
   });
 
   final ShapeKind shape;
@@ -298,6 +357,15 @@ class ShapeElement extends WbElement {
   final double strokeWidth;
   final StrokeStyle strokeStyle;
   final double cornerRadius;
+
+  /// 手绘强度。0 是标准几何描边，1 左右是「马克笔在白板上画的」，再大
+  /// 就变成草图感。抖动幅度是**世界单位**，不随缩放变：手绘的笔触粗细
+  /// 属于画本身，放大看应该还是那个粗细。
+  final double roughness;
+
+  /// 抖动种子。存在元素里，保证同一个形状每次重绘、每次导出都长得一样；
+  /// 不存的话每次 resize 完形状都会「跳」一下。
+  final int seed;
 
   @override
   ElementKind get kind => ElementKind.shape;
@@ -388,6 +456,8 @@ class ShapeElement extends WbElement {
     Rect? frame,
     double? rotation,
     double? opacity,
+    bool? visible,
+    bool? locked,
     ShapeKind? shape,
     Color? stroke,
     Color? fill,
@@ -395,6 +465,8 @@ class ShapeElement extends WbElement {
     double? strokeWidth,
     StrokeStyle? strokeStyle,
     double? cornerRadius,
+    double? roughness,
+    int? seed,
   }) =>
       ShapeElement(
         id: id ?? this.id,
@@ -405,8 +477,12 @@ class ShapeElement extends WbElement {
         strokeWidth: strokeWidth ?? this.strokeWidth,
         strokeStyle: strokeStyle ?? this.strokeStyle,
         cornerRadius: cornerRadius ?? this.cornerRadius,
+        roughness: roughness ?? this.roughness,
+        seed: seed ?? this.seed,
         rotation: rotation ?? this.rotation,
         opacity: opacity ?? this.opacity,
+        visible: visible ?? this.visible,
+        locked: locked ?? this.locked,
       );
 
   @override
@@ -418,6 +494,8 @@ class ShapeElement extends WbElement {
       'width': strokeWidth,
       'style': strokeStyle.name,
       'radius': cornerRadius,
+      if (roughness > 0) 'roughness': roughness,
+      if (seed != 0) 'seed': seed,
     });
 
   static ShapeElement fromJson(
@@ -444,8 +522,12 @@ class ShapeElement extends WbElement {
         orElse: () => StrokeStyle.solid,
       ),
       cornerRadius: _num(json['radius'], 12),
+      roughness: _num(json['roughness']).clamp(0.0, 3.0).toDouble(),
+      seed: _num(json['seed']).toInt(),
       rotation: rotation,
       opacity: opacity,
+      visible: _bool(json['visible'], true),
+      locked: _bool(json['locked']),
     );
   }
 }
@@ -465,6 +547,8 @@ class ArrowElement extends WbElement {
     this.strokeStyle = StrokeStyle.solid,
     super.rotation,
     super.opacity,
+    super.visible,
+    super.locked,
   });
 
   /// 本地坐标。
@@ -494,6 +578,8 @@ class ArrowElement extends WbElement {
     Rect? frame,
     double? rotation,
     double? opacity,
+    bool? visible,
+    bool? locked,
     Offset? start,
     Offset? end,
     Color? stroke,
@@ -514,6 +600,8 @@ class ArrowElement extends WbElement {
         strokeStyle: strokeStyle ?? this.strokeStyle,
         rotation: rotation ?? this.rotation,
         opacity: opacity ?? this.opacity,
+        visible: visible ?? this.visible,
+        locked: locked ?? this.locked,
       );
 
   @override
@@ -562,6 +650,8 @@ class ArrowElement extends WbElement {
       ),
       rotation: rotation,
       opacity: opacity,
+      visible: _bool(json['visible'], true),
+      locked: _bool(json['locked']),
     );
   }
 }
@@ -582,6 +672,8 @@ class TextElement extends WbElement {
     this.autoWidth = true,
     super.rotation,
     super.opacity,
+    super.visible,
+    super.locked,
   });
 
   final String text;
@@ -616,6 +708,8 @@ class TextElement extends WbElement {
     Rect? frame,
     double? rotation,
     double? opacity,
+    bool? visible,
+    bool? locked,
     String? text,
     Color? color,
     double? fontSize,
@@ -638,6 +732,8 @@ class TextElement extends WbElement {
         autoWidth: autoWidth ?? this.autoWidth,
         rotation: rotation ?? this.rotation,
         opacity: opacity ?? this.opacity,
+        visible: visible ?? this.visible,
+        locked: locked ?? this.locked,
       );
 
   /// 缩放文本时改字号而不是拉伸框 —— 拉伸会让字形变扁，字号变化才是
@@ -689,6 +785,8 @@ class TextElement extends WbElement {
       autoWidth: _bool(json['autoWidth'], true),
       rotation: rotation,
       opacity: opacity,
+      visible: _bool(json['visible'], true),
+      locked: _bool(json['locked']),
     );
   }
 }
@@ -705,6 +803,8 @@ class NoteElement extends WbElement {
     this.fontSize = 18,
     super.rotation,
     super.opacity,
+    super.visible,
+    super.locked,
   });
 
   final String text;
@@ -732,6 +832,8 @@ class NoteElement extends WbElement {
     Rect? frame,
     double? rotation,
     double? opacity,
+    bool? visible,
+    bool? locked,
     String? text,
     Color? fill,
     Color? textColor,
@@ -746,6 +848,8 @@ class NoteElement extends WbElement {
         fontSize: fontSize ?? this.fontSize,
         rotation: rotation ?? this.rotation,
         opacity: opacity ?? this.opacity,
+        visible: visible ?? this.visible,
+        locked: locked ?? this.locked,
       );
 
   @override
@@ -773,6 +877,8 @@ class NoteElement extends WbElement {
         fontSize: math.max(_num(json['fontSize'], 18), 4),
         rotation: rotation,
         opacity: opacity,
+        visible: _bool(json['visible'], true),
+        locked: _bool(json['locked']),
       );
 }
 
@@ -787,6 +893,8 @@ class ImageElement extends WbElement {
     this.label = '',
     super.rotation,
     super.opacity,
+    super.visible,
+    super.locked,
   });
 
   /// 原始文件字节。白板文档是自包含的（一个 .wbpro 走天下），所以图片
@@ -812,6 +920,8 @@ class ImageElement extends WbElement {
     Rect? frame,
     double? rotation,
     double? opacity,
+    bool? visible,
+    bool? locked,
     Uint8List? bytes,
     String? mimeType,
     String? label,
@@ -824,6 +934,8 @@ class ImageElement extends WbElement {
         label: label ?? this.label,
         rotation: rotation ?? this.rotation,
         opacity: opacity ?? this.opacity,
+        visible: visible ?? this.visible,
+        locked: locked ?? this.locked,
       );
 
   @override
@@ -855,6 +967,8 @@ class ImageElement extends WbElement {
       label: _str(json['label']),
       rotation: rotation,
       opacity: opacity,
+      visible: _bool(json['visible'], true),
+      locked: _bool(json['locked']),
     );
   }
 }

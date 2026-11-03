@@ -19,6 +19,7 @@ import '../util/id.dart';
 import 'actions.dart';
 import 'canvas_view.dart';
 import 'inspector_panel.dart';
+import 'layer_panel.dart';
 import 'shortcut_sheet.dart';
 import 'status_bar.dart';
 import 'text_overlay.dart';
@@ -56,6 +57,7 @@ class _HomePageState extends State<HomePage> {
       GlobalKey<TextEditorOverlayState>();
   Timer? _autosaveTimer;
   bool _inspectorOpen = true;
+  bool _layersOpen = false;
   bool _busy = false;
 
   WbDocument? _recovery;
@@ -542,6 +544,7 @@ class _HomePageState extends State<HomePage> {
         showAbout: () => showAboutWbPro(context),
         toggleTheme: widget.onToggleTheme,
         toggleInspector: () => setState(() => _inspectorOpen = !_inspectorOpen),
+        toggleLayers: () => setState(() => _layersOpen = !_layersOpen),
         clearCanvas: _clearCanvas,
         copySelection: _copySelection,
         cutSelection: _cutSelection,
@@ -557,6 +560,7 @@ class _HomePageState extends State<HomePage> {
         zoomToFit: _zoomToFit,
         toggleGrid: () => _controller.setShowGrid(!_controller.showGrid),
         toggleSnap: () => _controller.setSnapToGrid(!_controller.snapToGrid),
+        toggleGuides: () => _controller.setSmartGuides(!_controller.smartGuides),
         chooseCanvasColor: _chooseCanvasColor,
       );
 
@@ -654,6 +658,15 @@ class _HomePageState extends State<HomePage> {
       shift: true,
     );
 
+    // 视图
+    bind(LogicalKeyboardKey.keyL, () => setState(() => _layersOpen = !_layersOpen),
+        ctrl: true, shift: true);
+    bind(
+        LogicalKeyboardKey.keyP,
+        () => setState(() => _inspectorOpen = !_inspectorOpen),
+        ctrl: true,
+        alt: true);
+
     // 帮助
     bind(LogicalKeyboardKey.slash, () => showShortcutsDialog(context),
         shift: true);
@@ -722,6 +735,23 @@ class _HomePageState extends State<HomePage> {
                       compact: compact,
                     ),
                   ),
+
+                  // 图层面板：浮在左侧，和右侧的属性面板对称
+                  if (!compact && _layersOpen)
+                    Positioned(
+                      top: 72,
+                      left: WbTheme.inset,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight:
+                              MediaQuery.sizeOf(context).height - 72 - 68,
+                        ),
+                        child: LayerPanel(
+                          controller: _controller,
+                          onClose: () => setState(() => _layersOpen = false),
+                        ),
+                      ),
+                    ),
 
                   // 属性面板：浮在右侧，不推挤画布
                   if (showInspector)

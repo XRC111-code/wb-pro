@@ -476,6 +476,39 @@ void main() {
     });
   });
 
+  group('笔迹压力', () {
+    const points = <Offset>[Offset(0, 0), Offset(40, 10), Offset(90, 30)];
+
+    test('长度一致的压力会被保存', () {
+      final c = EditorController();
+      final stroke = c.createStroke(points, pressures: const <double>[1, 0.7, 0.4]);
+      expect(stroke.pressures, hasLength(3));
+      expect(stroke.hasPressure, isTrue);
+      c.dispose();
+    });
+
+    test('压力全为零时不保存', () {
+      final c = EditorController();
+      final stroke = c.createStroke(points, pressures: const <double>[0, 0, 0]);
+      expect(stroke.pressures, isEmpty);
+      expect(stroke.hasPressure, isFalse);
+      c.dispose();
+    });
+
+    test('长度不一致时不保存', () {
+      final c = EditorController();
+      final stroke = c.createStroke(points, pressures: const <double>[1]);
+      expect(stroke.pressures, isEmpty);
+      c.dispose();
+    });
+
+    test('不传压力时是等宽笔迹', () {
+      final c = EditorController();
+      expect(c.createStroke(points).hasPressure, isFalse);
+      c.dispose();
+    });
+  });
+
   group('文档', () {
     test('新建文档清空元素与历史', () {
       final controller = EditorController();
@@ -575,6 +608,151 @@ void main() {
       expect(controller.elements.length, 2);
       expect(controller.elements.last.frame.left, 20);
       controller.dispose();
+    });
+  });
+
+  group('图层', () {
+    test('隐藏后不再命中，也从选中集里移除', () {
+      final c = EditorController();
+      c.addElement(_shape('a', size: 100));
+      c.selectOnly('a');
+      c.setElementVisible('a', false);
+      expect(c.selection, isEmpty);
+      expect(c.hitTest(const Offset(50, 50)), isNull);
+      expect(c.elements.single.visible, isFalse);
+      c.dispose();
+    });
+
+    test('锁定后点不中、框选不到', () {
+      final c = EditorController();
+      c.addElement(_shape('a', size: 100));
+      c.selectOnly('a');
+      c.setElementLocked('a', true);
+      expect(c.selection, isEmpty);
+      expect(c.hitTest(const Offset(50, 50)), isNull);
+      expect(c.hitTestRect(const Rect.fromLTWH(0, 0, 200, 200)), isEmpty);
+      // 但元素还在
+      expect(c.elements, hasLength(1));
+      c.dispose();
+    });
+
+    test('解锁后又可以选中', () {
+      final c = EditorController();
+      c.addElement(_shape('a', size: 100));
+      c.setElementLocked('a', true);
+      c.setElementLocked('a', false);
+      expect(c.hitTest(const Offset(50, 50))?.id, 'a');
+      c.dispose();
+    });
+
+    test('全选跳过隐藏与锁定的元素', () {
+      final c = EditorController();
+      c.addElement(_shape('a'));
+      c.addElement(_shape('b').copyWith(frame: const Rect.fromLTWH(60, 0, 20, 20)));
+      c.addElement(_shape('c').copyWith(frame: const Rect.fromLTWH(120, 0, 20, 20)));
+      c.setElementVisible('a', false);
+      c.setElementLocked('b', true);
+      c.selectAll();
+      expect(c.selection, <String>{'c'});
+      c.dispose();
+    });
+
+    test('调整层级顺序', () {
+      final c = EditorController();
+      c.addElement(_shape('a'));
+      c.addElement(_shape('b'));
+      c.addElement(_shape('c'));
+      c.moveElement(2, 0);
+      expect(c.elements.map((e) => e.id), <String>['c', 'a', 'b']);
+      c.moveElement(0, 2);
+      expect(c.elements.map((e) => e.id), <String>['a', 'b', 'c']);
+      c.dispose();
+    });
+
+    test('越界的目标下标会被夹住', () {
+      final c = EditorController();
+      c.addElement(_shape('a'));
+      c.addElement(_shape('b'));
+      c.moveElement(0, 99);
+      expect(c.elements.map((e) => e.id), <String>['b', 'a']);
+      c.dispose();
+    });
+
+    test('隐藏与锁定可以撤销', () {
+      final c = EditorController();
+      c.addElement(_shape('a'));
+      c.setElementVisible('a', false);
+      expect(c.elements.single.visible, isFalse);
+      c.undo();
+      expect(c.elements.single.visible, isTrue);
+      c.dispose();
+    });
+  });
+
+  group('智能参考线', () {
+    /// a 占 0,0 到 100,100；b 放在指定位置。
+    EditorController scene({double bx = 103, double by = 102}) {
+      final c = EditorController();
+      c.addElement(_shape('a', size: 100));
+      c.addElement(_shape('b').copyWith(frame: Rect.fromLTWH(bx, by, 100, 80)));
+      return c;
+    }
+
+    test('靠近其他元素时给出修正位移和参考线', () {
+      final c = scene();
+      c.selectOnly('b');
+      final result = c.snapSelection(const Rect.fromLTWH(103, 102, 100, 80));
+      expect(result.delta.dx, closeTo(-3, 0.001));
+      expect(result.delta.dy, closeTo(-2, 0.001));
+      expect(c.activeGuides, isNotEmpty);
+      c.dispose();
+    });
+
+    test('不把自己当成对齐目标', () {
+      final c = EditorController();
+      c.addElement(_shape('a', size: 100));
+      c.selectOnly('a');
+      final result = c.snapSelection(const Rect.fromLTWH(2, 2, 100, 100));
+      expect(result.delta, Offset.zero);
+      expect(c.activeGuides, isEmpty);
+      c.dispose();
+    });
+
+    test('关掉开关后不再吸附，参考线也清空', () {
+      final c = scene();
+      c.selectOnly('b');
+      c.setSmartGuides(false);
+      final result = c.snapSelection(const Rect.fromLTWH(103, 102, 100, 80));
+      expect(result.delta, Offset.zero);
+      expect(c.activeGuides, isEmpty);
+      c.dispose();
+    });
+
+    test('阈值按缩放折算：放大后 1 个世界单位仍可吸附', () {
+      final c = scene(bx: 101);
+      c.selectOnly('b');
+      c.viewport.restore(Offset.zero, 4);
+      // 4 倍缩放下 6 屏幕像素 = 1.5 世界单位
+      expect(
+        c.snapSelection(const Rect.fromLTWH(101, 102, 100, 80)).delta.dx,
+        closeTo(-1, 0.001),
+      );
+      expect(
+        c.snapSelection(const Rect.fromLTWH(102, 102, 100, 80)).delta.dx,
+        0,
+        reason: '2 个世界单位 = 8 屏幕像素，超出 6px 阈值',
+      );
+      c.dispose();
+    });
+
+    test('拖拽结束清空参考线', () {
+      final c = scene();
+      c.selectOnly('b');
+      c.snapSelection(const Rect.fromLTWH(103, 102, 100, 80));
+      expect(c.activeGuides, isNotEmpty);
+      c.clearGuides();
+      expect(c.activeGuides, isEmpty);
+      c.dispose();
     });
   });
 }
