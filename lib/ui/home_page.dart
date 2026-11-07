@@ -823,9 +823,9 @@ class _HomePageState extends State<HomePage> {
                       },
                       onUndo: _controller.canUndo ? _actions.undo : null,
                       onClear: _actions.clearCanvas,
-                      onMenu: () => _openMainMenu(context),
+                      onMenu: _openMainMenu,
                       onSave: _actions.save,
-                      onMore: () => _openMoreSheet(context),
+                      onMore: _openMoreSheet,
                     ),
                   ),
 

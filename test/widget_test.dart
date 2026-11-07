@@ -21,14 +21,18 @@ Finder _iconButton(String tooltip) => find.byWidgetPredicate(
 
 /// 工具按钮的提示走 miuix 的 Overlay，不再是 Material 的 Tooltip，
 /// 所以按 widget 本身定位，而不是 find.byTooltip。
+///
+/// 参照「快捷白板」之后，工具条换成了带短标签的卡片（[WbToolCard]）：
+/// `label` 只放 2~3 个字（「矩形」），快捷键挪进了 `tooltip`。所以这里既
+/// 支持按 label 精确匹配，也支持按 label 前缀匹配。
 Finder _toolButton(String label) => find.byWidgetPredicate(
-      (widget) => widget is WbToolButton && widget.label == label,
+      (widget) => widget is WbToolCard && widget.label == label,
     );
 
-WbToolButton _tool(WidgetTester tester, String prefix) {
+WbToolCard _tool(WidgetTester tester, String prefix) {
   return tester
-      .widgetList<WbToolButton>(find.byType(WbToolButton))
-      .firstWhere((button) => button.label.startsWith(prefix));
+      .widgetList<WbToolCard>(find.byType(WbToolCard))
+      .firstWhere((card) => card.label.startsWith(prefix));
 }
 
 /// 画布底色不在 Widget 树的可读属性上，只能从画笔里取。
@@ -47,7 +51,10 @@ void main() {
 
     expect(find.text('未命名白板'), findsOneWidget);
     expect(find.text('空白画布'), findsOneWidget);
-    expect(find.byType(WbToolButton), findsNWidgets(13));
+    // 底栏共 18 张卡片：中组 13（11 个工具 + 图片 + 样式）+ 左组 2（菜单/保存）
+    // + 右组 3（撤销/清屏/更多）。数量固定：禁用态卡片仍然占位渲染，
+    // 位置不该随状态跳动。
+    expect(find.byType(WbToolCard), findsNWidgets(18));
     expect(find.text('0 个元素'), findsOneWidget);
   });
 
@@ -55,7 +62,7 @@ void main() {
     await _pumpApp(tester);
     expect(_tool(tester, '选择').selected, isTrue);
 
-    await tester.tap(_toolButton('矩形  R'));
+    await tester.tap(_toolButton('矩形'));
     await tester.pumpAndSettle();
 
     expect(_tool(tester, '矩形').selected, isTrue);
@@ -67,7 +74,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
     await tester.pumpAndSettle();
-    expect(_tool(tester, '画笔').selected, isTrue);
+    expect(_tool(tester, '笔').selected, isTrue);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
     await tester.pumpAndSettle();
@@ -77,7 +84,7 @@ void main() {
   testWidgets('拖拽画出一个矩形', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(_toolButton('矩形  R'));
+    await tester.tap(_toolButton('矩形'));
     await tester.pumpAndSettle();
 
     await tester.dragFrom(const Offset(500, 300), const Offset(140, 90));
@@ -94,7 +101,7 @@ void main() {
     final undo = tester.widget<WbIconButton>(_iconButton('撤销  Ctrl+Z'));
     expect(undo.onPressed, isNull);
 
-    await tester.tap(_toolButton('矩形  R'));
+    await tester.tap(_toolButton('矩形'));
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(400, 300), const Offset(100, 100));
     await tester.pumpAndSettle();
@@ -110,7 +117,9 @@ void main() {
   testWidgets('菜单里能找到导出项', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(find.byIcon(Icons.menu));
+    // 菜单已从顶栏下沉到底栏左组的「菜单」卡片（快捷白板的结构），
+    // 所以这里点底栏那张卡片而不是顶栏的 Icons.menu。
+    await tester.tap(_toolButton('菜单'));
     await tester.pumpAndSettle();
 
     expect(find.text('导出 PNG…'), findsOneWidget);
@@ -124,11 +133,9 @@ void main() {
     // 深色界面新建的空白文档是墨黑画布。
     expect(_canvasBackground(tester).toARGB32(), kCanvasInk.toARGB32());
 
-    await tester.tap(find.byIcon(Icons.menu));
+    await tester.tap(_toolButton('菜单'));
     await tester.pumpAndSettle();
-    // 视图相关项在子菜单里，主菜单保持一屏能放下。
-    await tester.tap(find.text('视图与帮助'));
-    await tester.pumpAndSettle();
+    // 底部弹层有足够高度，不再需要「视图与帮助」这层子菜单。
     await tester.tap(find.text('画布底色…'));
     await tester.pumpAndSettle();
 
@@ -145,19 +152,20 @@ void main() {
     await _pumpApp(tester);
 
     // 没选中任何东西时面板不占画布——它现在是浮层，常驻会白白压掉右侧。
-    expect(find.text('样式'), findsNothing);
+    // ⚠️ 不能用 find.text('样式') 判断：底栏常驻一张「样式」卡片（快捷白板
+    // 的结构），那个文字一直都在。改用只有属性面板才有的分区标题。
+    expect(find.text('描边'), findsNothing);
 
-    await tester.tap(_toolButton('矩形  R'));
+    await tester.tap(_toolButton('矩形'));
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(400, 300), const Offset(180, 120));
     await tester.pumpAndSettle();
 
-    await tester.tap(_toolButton('选择  V'));
+    await tester.tap(_toolButton('选择'));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(490, 360));
     await tester.pumpAndSettle();
 
-    expect(find.text('样式'), findsOneWidget);
     expect(find.text('描边'), findsOneWidget);
     expect(find.text('填充'), findsOneWidget);
   });
@@ -165,7 +173,7 @@ void main() {
   testWidgets('文本工具在画布上点出编辑框', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(_toolButton('文本  T'));
+    await tester.tap(_toolButton('文本'));
     await tester.pumpAndSettle();
 
     await tester.tapAt(const Offset(600, 320));
@@ -179,7 +187,7 @@ void main() {
   testWidgets('文本编辑期间点击画布只结束编辑', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(_toolButton('文本  T'));
+    await tester.tap(_toolButton('文本'));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(600, 320));
     await tester.pump(const Duration(milliseconds: 120));
@@ -196,7 +204,7 @@ void main() {
     await _pumpApp(tester);
 
     // 上面一个矩形
-    await tester.tap(_toolButton('矩形  R'));
+    await tester.tap(_toolButton('矩形'));
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(300, 200), const Offset(200, 100));
     await tester.pumpAndSettle();
@@ -232,7 +240,7 @@ void main() {
   testWidgets('图层面板可以打开并隐藏元素', (tester) async {
     await _pumpApp(tester);
 
-    await tester.tap(_toolButton('矩形  R'));
+    await tester.tap(_toolButton('矩形'));
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(420, 300), const Offset(140, 90));
     await tester.pumpAndSettle();
@@ -267,8 +275,8 @@ void main() {
     await tester.pumpWidget(const WbApp());
     await tester.pumpAndSettle();
 
-    // 紧凑模式仍然有 12 个工具按钮（含「样式」入口后为 13 个）。
-    expect(find.byType(WbToolButton), findsAtLeastNWidgets(12));
+    // 紧凑模式只收顶栏，底栏仍是完整的 18 张卡片。
+    expect(find.byType(WbToolCard), findsNWidgets(18));
     expect(find.text('空白画布'), findsOneWidget);
   });
 }
