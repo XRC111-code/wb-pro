@@ -821,7 +821,11 @@ class _HomePageState extends State<HomePage> {
                           setState(() => _inspectorOpen = !_inspectorOpen);
                         }
                       },
-                      onUndo: _controller.canUndo ? _actions.undo : null,
+                      // 撤销卡片**始终**渲染，不可用时只变灰（enabled: false）。
+                      // 若在 canUndo 为 false 时传 null，卡片会整个消失，底栏
+                      // 宽度和「清屏」「更多」的位置就跟着跳 —— 用户对按钮位置
+                      // 有肌肉记忆，工具条不该随状态改变形状。
+                      onUndo: _actions.undo,
                       onClear: _actions.clearCanvas,
                       onMenu: _openMainMenu,
                       onSave: _actions.save,

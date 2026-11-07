@@ -52,8 +52,8 @@ void main() {
     expect(find.text('未命名白板'), findsOneWidget);
     expect(find.text('空白画布'), findsOneWidget);
     // 底栏共 18 张卡片：中组 13（11 个工具 + 图片 + 样式）+ 左组 2（菜单/保存）
-    // + 右组 3（撤销/清屏/更多）。数量固定：禁用态卡片仍然占位渲染，
-    // 位置不该随状态跳动。
+    // + 右组 3（撤销/清屏/更多）。数量固定：不可用的卡片只变灰
+    // （enabled: false），不摘除 —— 工具条不该随状态改变形状。
     expect(find.byType(WbToolCard), findsNWidgets(18));
     expect(find.text('0 个元素'), findsOneWidget);
   });
