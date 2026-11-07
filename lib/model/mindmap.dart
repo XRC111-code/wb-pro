@@ -267,7 +267,7 @@ class MindMapLayoutEngine {
   Size nodeSize(
     MindMapNode node,
     double fontSize, {
-    Size Function(String line, double fontSize)? measure,
+    double Function(String line, double fontSize)? measure,
   }) {
     final lines = node.title.isEmpty ? <String>[' '] : node.title.split('\n');
     final lineHeight = fontSize * 1.3;
@@ -314,7 +314,7 @@ class MindMapLayoutEngine {
     List<MindMapNode> roots, {
     MindMapDirection direction = MindMapDirection.right,
     double fontSize = 14,
-    Size Function(String line, double fontSize)? measure,
+    double Function(String line, double fontSize)? measure,
   }) {
     if (roots.isEmpty) {
       return MindMapLayout(boxes: <MindMapNodeBox>[], direction: direction);

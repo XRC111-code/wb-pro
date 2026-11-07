@@ -266,7 +266,7 @@ void main() {
       final size = engine.nodeSize(
         _node('a', '很长的标题'),
         14,
-        measure: (String line, double fontSize) => const Size(500, 0),
+        measure: (String line, double fontSize) => 500.0,
       );
       // 500 + 左右内边距
       expect(size.width, closeTo(500 + engine.paddingX * 2, 0.01));
