@@ -25,7 +25,6 @@ import 'status_bar.dart';
 import 'text_overlay.dart';
 import 'theme.dart';
 import 'tool_rail.dart';
-import 'widgets.dart';
 
 /// 主界面。
 ///
