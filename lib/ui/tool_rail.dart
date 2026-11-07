@@ -142,13 +142,12 @@ class _ToolRailState extends State<ToolRail> {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        return Container(
-          width: double.infinity,
+        return Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: WbTheme.inset,
             vertical: 10,
           ),
-          color: WbTheme.shell,
+          // 底色由 home_page 的 ColoredBox 铺满整宽，这里只负责排布三组卡片。
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[

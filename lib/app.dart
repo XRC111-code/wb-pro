@@ -45,7 +45,9 @@ class _WbAppState extends State<WbApp> {
         onToggleTheme: _toggleTheme,
         // 首启的空白文档用和界面一致的底色。深色界面配一张白纸，一打开就
         // 像没加载完；之后这块底色归文档所有，切主题不再跟着变。
-        initialCanvasColor: _mode == ThemeMode.dark ? kCanvasInk : kCanvasPaper,
+        // 深色用 kCanvasGreen：与底栏外壳同一个绿，整窗连成一整片。
+        initialCanvasColor:
+            _mode == ThemeMode.dark ? kCanvasGreen : kCanvasPaper,
       ),
     );
   }

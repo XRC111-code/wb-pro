@@ -12,8 +12,15 @@ import 'dart:ui';
 /// 旧文档没有 canvas 字段时的回落值，也是「纸白」预设。
 const Color kCanvasPaper = Color(0xFFFAFAFA);
 
-/// 深色画布的默认值（新建文档、深色主题下使用）。
+/// 深色画布的历史默认值（新建文档、深色主题下曾使用它）。
 const Color kCanvasInk = Color(0xFF131518);
+
+/// 深绿画布：与「快捷白板」外壳同一个颜色。
+///
+/// 深色主题下的**默认**底色改成它，让画布与底栏连成一整片，而不是
+/// 「一块黑纸 + 一条绿边」那种割裂感。它仍是文档的一部分：用户切成
+/// 纸白或墨黑后，换机器打开还是那个样子。
+const Color kCanvasGreen = Color(0xFF0F261E);
 
 /// 可选画布底色。
 ///
@@ -34,6 +41,7 @@ class CanvasPreset {
 const List<CanvasPreset> kCanvasPresets = <CanvasPreset>[
   CanvasPreset('纸白', kCanvasPaper, '默认'),
   CanvasPreset('暖纸', Color(0xFFF0E9DA), '护眼'),
+  CanvasPreset('深绿', kCanvasGreen, '与界面一体'),
   CanvasPreset('石板', Color(0xFF2B3036), '柔和'),
   CanvasPreset('墨黑', kCanvasInk, '高对比'),
 ];

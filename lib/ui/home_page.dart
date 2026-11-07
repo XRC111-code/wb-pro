@@ -137,10 +137,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// 新文档的底色跟随当前主题：深色界面下新建一张黑纸，才不会一打开就是
-  /// 一块刺眼的白。之后它归文档所有，切主题不会再变。
-  Color get _freshCanvasColor =>
-      Theme.of(context).brightness == Brightness.dark ? kCanvasInk : kCanvasPaper;
+  /// 新文档的底色跟随当前主题：深色界面下新建一张深绿纸，才不会一打开就是
+  /// 一块刺眼的白，也不会和底栏外壳割裂成两种颜色。之后它归文档所有，
+  /// 切主题不会再变。
+  Color get _freshCanvasColor => Theme.of(context).brightness == Brightness.dark
+      ? kCanvasGreen
+      : kCanvasPaper;
 
   Future<void> _newDocument() async {
     if (!await _confirmDiscard()) return;
@@ -803,33 +805,44 @@ class _HomePageState extends State<HomePage> {
                         compact: compact,
                       ),
                     ),
-                  // 工具条：整宽深色外壳贴底（快捷白板的结构）。外壳自己做
-                  // 背景，所以这里不再套 Positioned + Center，也不用顺延
-                  // WbTheme.inset——它必须顶到屏幕最底边，留白会露出画布。
+                  // 工具条：整宽深色外壳贴底（快捷白板的结构）。
+                  //
+                  // ⚠️ 底色由这里的 ColoredBox 铺，ToolRail 内部不再画背景：
+                  // 之前把 color 放在 ToolRail 的 Container 上，实测只覆盖了
+                  // Row 里 Expanded 那一段（左右两组卡片下面露出黑底），
+                  // 形成「中间一条绿、两头黑」的断裂。SizedBox 给死高度、
+                  // ColoredBox 铺满整宽，是最不容易被布局约束影响组合影响的写法。
                   Positioned(
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: ToolRail(
-                      controller: _controller,
-                      onImportImage: _importImage,
-                      inspectorOpen: showInspector,
-                      onOpenInspector: () {
-                        if (compact) {
-                          _openInspectorSheet();
-                        } else {
-                          setState(() => _inspectorOpen = !_inspectorOpen);
-                        }
-                      },
-                      // 撤销卡片**始终**渲染，不可用时只变灰（enabled: false）。
-                      // 若在 canUndo 为 false 时传 null，卡片会整个消失，底栏
-                      // 宽度和「清屏」「更多」的位置就跟着跳 —— 用户对按钮位置
-                      // 有肌肉记忆，工具条不该随状态改变形状。
-                      onUndo: _actions.undo,
-                      onClear: _actions.clearCanvas,
-                      onMenu: _openMainMenu,
-                      onSave: _actions.save,
-                      onMore: _openMoreSheet,
+                    child: SizedBox(
+                      height: WbTheme.shellBarHeight,
+                      child: ColoredBox(
+                        color: WbTheme.shell,
+                        child: ToolRail(
+                          controller: _controller,
+                          onImportImage: _importImage,
+                          inspectorOpen: showInspector,
+                          onOpenInspector: () {
+                            if (compact) {
+                              _openInspectorSheet();
+                            } else {
+                              setState(() => _inspectorOpen = !_inspectorOpen);
+                            }
+                          },
+                          // 撤销卡片**始终**渲染，不可用时只变灰
+                          // （enabled: false）。若在 canUndo 为 false 时传 null，
+                          // 卡片会整个消失，底栏宽度和「清屏」「更多」的位置
+                          // 就跟着跳 —— 用户对按钮位置有肌肉记忆，工具条不该
+                          // 随状态改变形状。
+                          onUndo: _actions.undo,
+                          onClear: _actions.clearCanvas,
+                          onMenu: _openMainMenu,
+                          onSave: _actions.save,
+                          onMore: _openMoreSheet,
+                        ),
+                      ),
                     ),
                   ),
 

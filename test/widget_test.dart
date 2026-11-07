@@ -130,8 +130,8 @@ void main() {
   testWidgets('菜单里可以换画布底色', (tester) async {
     await _pumpApp(tester);
 
-    // 深色界面新建的空白文档是墨黑画布。
-    expect(_canvasBackground(tester).toARGB32(), kCanvasInk.toARGB32());
+    // 深色界面新建的空白文档是深绿画布（与底栏外壳同一个颜色）。
+    expect(_canvasBackground(tester).toARGB32(), kCanvasGreen.toARGB32());
 
     await tester.tap(_toolButton('菜单'));
     await tester.pumpAndSettle();
