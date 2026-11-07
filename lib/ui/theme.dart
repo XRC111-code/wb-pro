@@ -18,8 +18,39 @@ class WbTheme {
 
   /// 强调色。选绿而不是蓝：白板里蓝色和「链接 / 选中框」撞得太厉害，
   /// 绿色只出现在「当前状态」上，一眼就能定位。
-  static const Color accent = Color(0xFF00BE6E);
+  ///
+  /// 取色对齐「快捷白板」：激活态的实底绿是 `#2DC360`，比原来的 `#00BE6E`
+  /// 更偏冷、更沉，压在白色卡片上对比更稳。
+  static const Color accent = Color(0xFF2DC360);
   static const Color accentDark = Color(0xFF2FD98A);
+
+  // ---------------------------------------------------------------------------
+  // 快捷白板视觉体系
+  // ---------------------------------------------------------------------------
+
+  /// 外壳底色：底部工具条与画布四周的深绿。
+  ///
+  /// 这是**界面**的颜色，不是文档的底色——画布底色仍然属于文档
+  /// （见 `model/canvas_style.dart`），两者互不影响。
+  static const Color shell = Color(0xFF0F261E);
+
+  /// 工具卡片组（白色圆角条）的底色。
+  static const Color cardSurface = Color(0xCCFFFFFF);
+
+  /// 卡片内文字与图标（压在白色卡片上）。
+  static const Color onCard = Color(0xFF1A1A1A);
+
+  /// 激活态卡片上的文字与图标。
+  static const Color onCardActive = Color(0xFFFFFFFF);
+
+  /// 卡片组高度。快捷白板实测 50px，对应图标 18 + 文字 11 + 间距 3。
+  static const double cardBarHeight = 50;
+
+  /// 单个工具卡片的圆角。
+  static const double cardRadius = 6;
+
+  /// 底部工具条总高度（含上下内边距）。
+  static const double shellBarHeight = 70;
 
   // 画布底色不在这里：它属于文档（见 model/canvas_style.dart），同一份 .wbpro
   // 在深浅色界面里打开必须长得一样。主题只管外围的 chrome。
@@ -247,6 +278,26 @@ class WbTheme {
           color: Colors.black.withValues(alpha: dark ? 0.22 : 0.10),
           blurRadius: 16,
           offset: const Offset(0, 5),
+        ),
+      ],
+    );
+  }
+
+  /// 工具卡片组（白色圆角条）的装饰。
+  ///
+  /// 与 [chromeDecoration] 的区别：这个**永远**是浅色卡片，因为它压在一块
+  /// 固定的深绿外壳上。跟着系统深色模式反转会让底栏在深色下变成一整片灰，
+  /// 反而丢掉「深底 + 白卡」的层次。
+  static BoxDecoration cardGroupDecoration() {
+    return BoxDecoration(
+      color: cardSurface,
+      borderRadius: BorderRadius.circular(cardRadius),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      boxShadow: <BoxShadow>[
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.3),
+          blurRadius: 5,
+          offset: const Offset(0, 2),
         ),
       ],
     );

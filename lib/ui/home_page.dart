@@ -706,7 +706,17 @@ class _HomePageState extends State<HomePage> {
                   _controller.selection.isNotEmpty;
               return Stack(
                 children: <Widget>[
-                  Positioned.fill(
+                  // 画布止于底栏上沿，而不是铺满整窗再被底栏盖住。
+                  //
+                  // 底栏现在是 70px 的实色外壳（快捷白板的结构）。若画布仍
+                  // `Positioned.fill`，那一带会被永久遮住：用户在底部落笔，
+                  // 笔迹直接落在外壳底下看不见，但内容其实画上了——这是最
+                  // 难受的一类「看不见的操作生效」。
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: WbTheme.shellBarHeight,
                     child: CanvasView(
                       controller: _controller,
                       onEditText: _beginEditing,
@@ -724,7 +734,8 @@ class _HomePageState extends State<HomePage> {
                   ),
                   if (_recovery != null) _recoveryBanner(context),
 
-                  // 顶部两角
+                  // 顶部：只留文档名与右侧的几个就地动作。菜单已移到底栏，
+                  // 这里不再放汉堡菜单——顶栏变宽会压到属性面板。
                   Positioned(
                     top: WbTheme.inset,
                     left: WbTheme.inset,
@@ -744,7 +755,10 @@ class _HomePageState extends State<HomePage> {
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
                           maxHeight:
-                              MediaQuery.sizeOf(context).height - 72 - 68,
+                              MediaQuery.sizeOf(context).height -
+                              72 -
+                              WbTheme.shellBarHeight -
+                              WbTheme.inset,
                         ),
                         child: LayerPanel(
                           controller: _controller,
@@ -763,7 +777,10 @@ class _HomePageState extends State<HomePage> {
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
                           maxHeight:
-                              MediaQuery.sizeOf(context).height - 72 - 68,
+                              MediaQuery.sizeOf(context).height -
+                              72 -
+                              WbTheme.shellBarHeight -
+                              WbTheme.inset,
                         ),
                         child: InspectorPanel(
                           controller: _controller,
@@ -772,37 +789,43 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
 
-                  // 底部
+                  // 右下角的状态条：抬到工具条**上方**。
+                  // 工具条现在是贴底的整宽外壳（70px），statusBar 若还停在
+                  // inset 处会被它完全盖住——看不见比不显示更糟。
                   if (roomForFooter)
                     Positioned(
                       left: WbTheme.inset,
                       right: WbTheme.inset,
-                      bottom: WbTheme.inset,
+                      bottom: WbTheme.shellBarHeight + WbTheme.inset,
                       child: StatusBar(
                         controller: _controller,
                         actions: _actions,
                         compact: compact,
                       ),
                     ),
-                  // 工具条放最后：万一和两侧状态在窄窗口下碰上了，压在下面
-                  // 的应该是文字而不是按钮。
+                  // 工具条：整宽深色外壳贴底（快捷白板的结构）。外壳自己做
+                  // 背景，所以这里不再套 Positioned + Center，也不用顺延
+                  // WbTheme.inset——它必须顶到屏幕最底边，留白会露出画布。
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: WbTheme.inset,
-                    child: Center(
-                      child: ToolRail(
-                        controller: _controller,
-                        onImportImage: _importImage,
-                        inspectorOpen: showInspector,
-                        onOpenInspector: () {
-                          if (compact) {
-                            _openInspectorSheet();
-                          } else {
-                            setState(() => _inspectorOpen = !_inspectorOpen);
-                          }
-                        },
-                      ),
+                    bottom: 0,
+                    child: ToolRail(
+                      controller: _controller,
+                      onImportImage: _importImage,
+                      inspectorOpen: showInspector,
+                      onOpenInspector: () {
+                        if (compact) {
+                          _openInspectorSheet();
+                        } else {
+                          setState(() => _inspectorOpen = !_inspectorOpen);
+                        }
+                      },
+                      onUndo: _controller.canUndo ? _actions.undo : null,
+                      onClear: _actions.clearCanvas,
+                      onMenu: () => _openMainMenu(context),
+                      onSave: _actions.save,
+                      onMore: () => _openMoreSheet(context),
                     ),
                   ),
 
@@ -981,11 +1004,92 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
+  /// 底栏「菜单」：文件、导出、视图、帮助的完整入口。
+  ///
+  /// 走底部弹层而不是顶栏下拉：菜单按钮现在在屏幕最下方，往上弹贴合手指/
+  /// 鼠标的来向；顶栏下拉从底部按钮弹出来会横跨整个窗口。
+  void _openMainMenu() {
+    // compact 在 build() 里是局部变量，方法体里拿不到，这里现算一次。
+    final narrow = MediaQuery.sizeOf(context).width < WbTheme.compactBreakpoint;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => _MainMenuSheet(
+        controller: _controller,
+        actions: _actions,
+        onToggleInspector: () {
+          Navigator.of(sheetContext).pop();
+          if (narrow) {
+            _openInspectorSheet();
+          } else {
+            setState(() => _inspectorOpen = !_inspectorOpen);
+          }
+        },
+        onToggleLayers: () {
+          Navigator.of(sheetContext).pop();
+          setState(() => _layersOpen = !_layersOpen);
+        },
+      ),
+    );
+  }
+
+  /// 底栏「更多」：不常驻但常用的操作，免得它们挤满工具条。
+  void _openMoreSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.redo),
+              title: const Text('重做'),
+              subtitle: const Text('Ctrl+Shift+Z'),
+              enabled: _controller.canRedo,
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _actions.redo();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('导出 PNG'),
+              subtitle: const Text('按内容范围渲染，2 倍像素密度'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _actions.exportPng();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.timeline),
+              title: const Text('导出 SVG'),
+              subtitle: const Text('矢量格式，可在 Figma / Illustrator 里编辑'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _actions.exportSvg();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('画布底色'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _actions.chooseCanvasColor();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CanvasColorDialog extends StatelessWidget {
   const _CanvasColorDialog({required this.current});
-
   final Color current;
 
   @override
@@ -1140,6 +1244,120 @@ class _RenameDialogState extends State<_RenameDialog> {
           child: const Text('确定', style: TextStyle(fontSize: 14)),
         ),
       ],
+    );
+  }
+}
+
+/// 底栏「菜单」弹出的完整入口。
+///
+/// 从 TopBar 的 MenuAnchor 搬过来：菜单按钮下沉到底栏之后，弹层方向也要跟着
+/// 变成「从下往上」。这里用分组列表而不是 MenuAnchor 的单个菜单项，是因为
+/// 底部弹层有足够的高度容纳二十多项，不需要再嵌套子菜单（原来「视图与帮助」
+/// 那一层子菜单就是为了绕开高度限制）。
+class _MainMenuSheet extends StatelessWidget {
+  const _MainMenuSheet({
+    required this.controller,
+    required this.actions,
+    required this.onToggleInspector,
+    required this.onToggleLayers,
+  });
+
+  final EditorController controller;
+  final WbActions actions;
+  final VoidCallback onToggleInspector;
+  final VoidCallback onToggleLayers;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSelection = controller.selection.isNotEmpty;
+    final subtle = WbTheme.subtleText(context);
+
+    Widget group(String title, List<Widget> items) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.3,
+                  color: subtle,
+                ),
+              ),
+            ),
+            ...items,
+          ],
+        );
+
+    Widget item(
+      IconData icon,
+      String title,
+      VoidCallback? onTap, {
+      String? shortcut,
+      bool danger = false,
+    }) {
+      final color = onTap == null
+          ? subtle.withValues(alpha: 0.4)
+          : (danger ? const Color(0xFFE03131) : null);
+      return ListTile(
+        dense: true,
+        leading: Icon(icon, size: 19, color: color),
+        title: Text(title, style: TextStyle(fontSize: 13.5, color: color)),
+        trailing: shortcut == null
+            ? null
+            : Text(shortcut, style: TextStyle(fontSize: 11, color: subtle)),
+        onTap: onTap == null
+            ? null
+            : () {
+                Navigator.of(context).pop();
+                onTap();
+              },
+      );
+    }
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            group('文件', <Widget>[
+              item(Icons.note_add_outlined, '新建', actions.newDocument, shortcut: 'Ctrl+N'),
+              item(Icons.folder_open_outlined, '打开…', actions.openDocument, shortcut: 'Ctrl+O'),
+              item(Icons.save_outlined, '保存', actions.save, shortcut: 'Ctrl+S'),
+              item(Icons.save_as_outlined, '另存为…', actions.saveAs, shortcut: 'Ctrl+Shift+S'),
+              item(Icons.image_outlined, '导出 PNG…', actions.exportPng, shortcut: 'Ctrl+E'),
+              item(Icons.timeline, '导出 SVG…', actions.exportSvg),
+              item(Icons.add_photo_alternate_outlined, '插入图片…', actions.importImage),
+            ]),
+            group('编辑', <Widget>[
+              item(Icons.undo, '撤销', controller.canUndo ? actions.undo : null, shortcut: 'Ctrl+Z'),
+              item(Icons.redo, '重做', controller.canRedo ? actions.redo : null, shortcut: 'Ctrl+Shift+Z'),
+              item(Icons.content_cut, '剪切', hasSelection ? actions.cutSelection : null, shortcut: 'Ctrl+X'),
+              item(Icons.content_copy, '复制', hasSelection ? actions.copySelection : null, shortcut: 'Ctrl+C'),
+              item(Icons.content_paste, '粘贴', actions.paste, shortcut: 'Ctrl+V'),
+              item(Icons.copy_all_outlined, '创建副本', hasSelection ? actions.duplicateSelection : null, shortcut: 'Ctrl+D'),
+              item(Icons.delete_outline, '删除', hasSelection ? actions.deleteSelection : null, shortcut: 'Del', danger: true),
+              item(Icons.select_all, '全选', actions.selectAll, shortcut: 'Ctrl+A'),
+              item(Icons.palette_outlined, '画布底色…', actions.chooseCanvasColor),
+            ]),
+            group('视图', <Widget>[
+              item(Icons.grid_on, controller.showGrid ? '隐藏网格' : '显示网格', actions.toggleGrid, shortcut: 'Ctrl+G'),
+              item(Icons.straighten, controller.snapToGrid ? '关闭吸附' : '吸附到网格', actions.toggleSnap, shortcut: 'Ctrl+Shift+G'),
+              item(Icons.align_horizontal_left, controller.smartGuides ? '关闭智能参考线' : '开启智能参考线', actions.toggleGuides),
+              item(Icons.tune, '属性面板', onToggleInspector, shortcut: 'Ctrl+Alt+P'),
+              item(Icons.layers_outlined, '图层面板', onToggleLayers, shortcut: 'Ctrl+Shift+L'),
+            ]),
+            group('帮助', <Widget>[
+              item(Icons.keyboard_outlined, '快捷键', actions.showShortcuts, shortcut: '?'),
+              item(Icons.info_outline, '关于 wb-pro', actions.showAbout),
+            ]),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
     );
   }
 }

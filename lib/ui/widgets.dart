@@ -92,42 +92,127 @@ class WbIconButton extends StatelessWidget {
   }
 }
 
-/// 工具条里的工具按钮。选中时是一块实心强调色，其余状态只有图标。
-class WbToolButton extends StatelessWidget {
-  const WbToolButton({
+/// 快捷白板式工具卡片：图标在上、文字在下，整块可点。
+///
+/// 以前工具条是纯图标的，但工具一多就必须靠悬停才知道是什么；带一行短标签
+/// 让「笔 / 橡皮 / 选择」一眼可辨，代价是每格宽到 60px。
+///
+/// 选中态是整块实底强调色（图标和文字一起变白），不是描边高亮——底部工具条
+/// 有深色外壳托着，实底块比一圈细描边在余光里更容易定位。
+class WbToolCard extends StatelessWidget {
+  const WbToolCard({
     super.key,
     required this.icon,
     required this.label,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
+    this.tooltip = '',
+    this.iconSize = 18,
+    this.minWidth = 60,
   });
 
   final IconData icon;
+
+  /// 卡片下方的短标签（2~3 个字）。
   final String label;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+
+  /// 不可用时整块降透明度，但仍占位——工具条的位置不该随状态跳动。
+  final bool enabled;
+
+  /// 悬停提示。默认与标签相同，需要补充快捷键时传更长的文案。
+  final String tooltip;
+  final double iconSize;
+  final double minWidth;
 
   @override
   Widget build(BuildContext context) {
     final accent = WbTheme.activeColor(context);
-    return _tip(
-      message: label,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: MiuixIconButton(
-          onPressed: onTap,
-          backgroundColor: selected ? accent : null,
-          cornerRadius: 8,
-          minWidth: 36,
-          minHeight: 36,
-          child: MiuixIcon(
-            icon: icon,
-            size: 19,
-            tint: selected
-                ? Colors.white
-                : WbTheme.onChrome(context, alpha: 0.78),
+    final fg = !enabled
+        ? WbTheme.onCard.withValues(alpha: 0.32)
+        : (selected ? WbTheme.onCardActive : WbTheme.onCard);
+
+    final face = AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      constraints: BoxConstraints(minWidth: minWidth),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: selected ? accent : Colors.transparent,
+        borderRadius: BorderRadius.circular(WbTheme.cardRadius),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(icon, size: iconSize, color: fg),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: WbTheme.fontFamily,
+              fontSize: 11,
+              height: 1.1,
+              fontWeight: FontWeight.w400,
+              color: fg,
+            ),
           ),
-        ),
+        ],
+      ),
+    );
+
+    // 禁用时不挂 onPressed，而不是传 null：MiuixPressable 的 onPressed 是否
+    // 可空取决于版本，这里绕开这个约定——禁用本来就不该有按压反馈。
+    final interactive = enabled && onTap != null
+        ? MiuixPressable(
+            onPressed: onTap!,
+            borderRadius: BorderRadius.circular(WbTheme.cardRadius),
+            child: face,
+          )
+        : face;
+
+    return _tip(message: tooltip.isEmpty ? label : tooltip, child: interactive);
+  }
+}
+
+/// 一整组工具卡片：白色圆角条，内部按卡片逐个分隔。
+///
+/// 卡片之间那条 1px 竖线是这组控件能被读成「一个整体」的关键——没有它，
+/// 一排白底方块会有各自独立的错觉。
+class WbToolCardGroup extends StatelessWidget {
+  const WbToolCardGroup({
+    super.key,
+    required this.children,
+    this.padding = EdgeInsets.zero,
+  });
+
+  final List<Widget> children;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      if (i > 0) {
+        rows.add(Container(
+          width: 1,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          color: Colors.black.withValues(alpha: 0.08),
+        ));
+      }
+      rows.add(children[i]);
+    }
+    return Container(
+      decoration: WbTheme.cardGroupDecoration(),
+      padding: padding,
+      height: WbTheme.cardBarHeight,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(WbTheme.cardRadius),
+        child: Row(mainAxisSize: MainAxisSize.min, children: rows),
       ),
     );
   }
