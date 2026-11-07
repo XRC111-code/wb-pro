@@ -160,8 +160,10 @@ class MindMapParser {
 
   // ── FreeMind (.mm) ───────────────────────────────────────────────────────
   MindMapNode parseFreeMind(String xml) {
-    final root = _parseXml(xml);
-    final map = _firstElement(root, 'map');
+    final doc = _parseXml(xml);
+    // 结构就是 document > map > node。这里精确取直接子节点：
+    // 深度查找会命中内嵌在 richcontent 里的另一份 <map>，读到错的那份。
+    final map = _firstElement(doc, 'map');
     final node = map == null ? null : _firstElement(map, 'node');
     if (node == null) {
       throw const MindMapParseException('这份 .mm 里没有 <map><node> 结构。');
@@ -197,7 +199,16 @@ class MindMapParser {
 
   // ── OPML ─────────────────────────────────────────────────────────────────
   MindMapNode parseOpml(String xml) {
-    final root = _parseXml(xml);
+    final doc = _parseXml(xml);
+    // ⚠️ 不能直接在 document 下找 head/body：真实结构是
+    //    #document > opml > head / body，中间隔着 opml 这一层。
+    //    只找直接子节点会让 title 永远读不到，静默回退成「OPML」——
+    //    测试报的正是这个（期望「我的大纲」，实际「OPML」）。
+    //
+    //    精确取直接子节点而不是深度查找：后者会命中任意深度的同名元素，
+    //    万一某个 outline 里内嵌了 <opml> 片段（粘贴进来的子文档），
+    //    就会读到那一段的 head。
+    final root = _firstElement(doc, 'opml') ?? doc;
     final head = _firstElement(root, 'head');
     final titleEl = head == null ? null : _firstElement(head, 'title');
     final title = (titleEl?.text.trim().isNotEmpty ?? false)
@@ -383,6 +394,7 @@ class MindMapParser {
     }
     return null;
   }
+
 
   /// 收集一个元素及其所有后代里的文本，按出现顺序拼接。
   ///
