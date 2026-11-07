@@ -25,7 +25,6 @@ import 'status_bar.dart';
 import 'text_overlay.dart';
 import 'theme.dart';
 import 'tool_rail.dart';
-import 'top_bar.dart';
 import 'widgets.dart';
 
 /// 主界面。
@@ -61,7 +60,6 @@ class _HomePageState extends State<HomePage> {
   bool _busy = false;
 
   WbDocument? _recovery;
-  DateTime? _recoveryAt;
 
   @override
   void initState() {
@@ -103,11 +101,9 @@ class _HomePageState extends State<HomePage> {
     try {
       final result = WbDocument.decode(raw);
       if (result.document.elements.isEmpty) return;
-      final at = await AutosaveStore.modifiedAt();
       if (!mounted) return;
       setState(() {
         _recovery = result.document;
-        _recoveryAt = at;
       });
     } on DocumentException {
       // 存档坏了就当没有，不要用一个错误弹窗迎接用户。
@@ -734,20 +730,14 @@ class _HomePageState extends State<HomePage> {
                           : const SizedBox.shrink(),
                     ),
                   ),
-                  if (_recovery != null) _recoveryBanner(context),
-
-                  // 顶部：只留文档名与右侧的几个就地动作。菜单已移到底栏，
-                  // 这里不再放汉堡菜单——顶栏变宽会压到属性面板。
-                  Positioned(
-                    top: WbTheme.inset,
-                    left: WbTheme.inset,
-                    right: WbTheme.inset,
-                    child: TopBar(
-                      controller: _controller,
-                      actions: _actions,
-                      compact: compact,
-                    ),
-                  ),
+                  // 顶部不留任何浮层。
+                  //
+                  // 之前这里是「左上文档名 + 右上动作组 + 中间自动保存提示」
+                  // 三块小浮层，参考图（快捷白板）的顶部是完全干净的：只有
+                  // 右上角一个时间胶囊。所有入口已下沉到底栏的「菜单」卡片
+                  // 与三组工具里，文档名也搬到了菜单顶部（可点重命名）。
+                  // 恢复提示条同样去掉：它只在有可恢复内容时出现，属于偶发
+                  // 的干扰；自动保存本身照常进行，用户可从菜单「打开…」找回。
 
                   // 图层面板：浮在左侧，和右侧的属性面板对称
                   if (!compact && _layersOpen)
@@ -942,68 +932,19 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _recoveryBanner(BuildContext context) {
-    return Positioned(
-      top: 12,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: WbPanel(
-          padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              MiuixIcon(
-                icon: Icons.restore,
-                size: 15,
-                tint: WbTheme.activeColor(context),
-              ),
-              const SizedBox(width: 8),
-              MiuixText(
-                '发现 ${_formatAgo(_recoveryAt)}的自动存档',
-                style: const TextStyle(fontSize: 12.5),
-              ),
-              const SizedBox(width: 4),
-              MiuixTextButton(
-                '恢复',
-                onPressed: () {
-                  final document = _recovery;
-                  if (document == null) return;
-                  _loadDocument(document);
-                  // 恢复出来的内容还没落到用户文件上，标脏让「保存」有意义。
-                  _controller.setDirty(true);
-                  setState(() => _recovery = null);
-                  _notice('已恢复自动存档');
-                },
-                minWidth: 0,
-                minHeight: 0,
-                cornerRadius: 8,
-                insideMargin:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                textStyle: const TextStyle(fontSize: 12.5),
-              ),
-              const SizedBox(width: 2),
-              WbIconButton(
-                icon: Icons.close,
-                tooltip: '忽略',
-                size: 26,
-                iconSize: 15,
-                onPressed: () => setState(() => _recovery = null),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatAgo(DateTime? at) {
-    if (at == null) return '刚才';
-    final diff = DateTime.now().difference(at);
-    if (diff.inMinutes < 1) return '刚才';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-    if (diff.inHours < 24) return '${diff.inHours} 小时前';
-    return '${diff.inDays} 天前';
+  /// 打开自动存档（如果检测到）。顶栏删掉后，这个入口搬进「菜单」。
+  Future<void> _restoreAutosave() async {
+    final document = _recovery;
+    if (document == null) {
+      _notice('没有可恢复的自动存档');
+      return;
+    }
+    if (!await _confirmDiscard()) return;
+    _loadDocument(document);
+    // 恢复出来的内容还没落到用户文件上，标脏让「保存」有意义。
+    _controller.setDirty(true);
+    setState(() => _recovery = null);
+    _notice('已恢复自动存档');
   }
 
   void _openInspectorSheet() {
@@ -1048,6 +989,8 @@ class _HomePageState extends State<HomePage> {
           Navigator.of(sheetContext).pop();
           setState(() => _layersOpen = !_layersOpen);
         },
+        onRestoreAutosave: _restoreAutosave,
+        hasAutosave: _recovery != null,
       ),
     );
   }
@@ -1277,12 +1220,18 @@ class _MainMenuSheet extends StatelessWidget {
     required this.actions,
     required this.onToggleInspector,
     required this.onToggleLayers,
+    required this.onRestoreAutosave,
+    required this.hasAutosave,
   });
 
   final EditorController controller;
   final WbActions actions;
   final VoidCallback onToggleInspector;
   final VoidCallback onToggleLayers;
+
+  /// 顶栏删掉后，「恢复自动存档」从顶部提示条搬进菜单。
+  final VoidCallback onRestoreAutosave;
+  final bool hasAutosave;
 
   @override
   Widget build(BuildContext context) {
@@ -1340,9 +1289,43 @@ class _MainMenuSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            // 顶栏删掉之后，文档名总得有个地方能看到。放在菜单顶部：
+            // 它本来就是「文件」这组信息的头，点一下还能直接改名。
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      controller.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: WbTheme.fontFamily,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: WbTheme.onChrome(context),
+                      ),
+                    ),
+                  ),
+                  if (controller.dirty)
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: WbTheme.activeColor(context),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            ),
             group('文件', <Widget>[
               item(Icons.note_add_outlined, '新建', actions.newDocument, shortcut: 'Ctrl+N'),
               item(Icons.folder_open_outlined, '打开…', actions.openDocument, shortcut: 'Ctrl+O'),
+              if (hasAutosave)
+                item(Icons.restore, '恢复自动存档…', onRestoreAutosave),
+              item(Icons.drive_file_rename_outline, '重命名…', actions.renameDocument),
               item(Icons.save_outlined, '保存', actions.save, shortcut: 'Ctrl+S'),
               item(Icons.save_as_outlined, '另存为…', actions.saveAs, shortcut: 'Ctrl+Shift+S'),
               item(Icons.image_outlined, '导出 PNG…', actions.exportPng, shortcut: 'Ctrl+E'),

@@ -15,10 +15,6 @@ Future<void> _pumpApp(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Finder _iconButton(String tooltip) => find.byWidgetPredicate(
-      (widget) => widget is WbIconButton && widget.tooltip == tooltip,
-    );
-
 /// 工具按钮的提示走 miuix 的 Overlay，不再是 Material 的 Tooltip，
 /// 所以按 widget 本身定位，而不是 find.byTooltip。
 ///
@@ -49,13 +45,18 @@ void main() {
   testWidgets('空画布显示引导与工具栏', (tester) async {
     await _pumpApp(tester);
 
-    expect(find.text('未命名白板'), findsOneWidget);
+    // 顶栏删掉后，文档名搬到「菜单」弹层的顶部，初始界面不再常驻显示。
+    expect(find.text('未命名白板'), findsNothing);
     expect(find.text('空白画布'), findsOneWidget);
     // 底栏共 18 张卡片：中组 13（11 个工具 + 图片 + 样式）+ 左组 2（菜单/保存）
     // + 右组 3（撤销/清屏/更多）。数量固定：不可用的卡片只变灰
     // （enabled: false），不摘除 —— 工具条不该随状态改变形状。
     expect(find.byType(WbToolCard), findsNWidgets(18));
     expect(find.text('0 个元素'), findsOneWidget);
+
+    await tester.tap(_toolButton('菜单'));
+    await tester.pumpAndSettle();
+    expect(find.text('未命名白板'), findsOneWidget);
   });
 
   testWidgets('点击工具按钮切换当前工具', (tester) async {
@@ -98,18 +99,18 @@ void main() {
   testWidgets('撤销按钮在画完之前是禁用的', (tester) async {
     await _pumpApp(tester);
 
-    final undo = tester.widget<WbIconButton>(_iconButton('撤销  Ctrl+Z'));
-    expect(undo.onPressed, isNull);
+    // 顶栏删掉后，撤销只在底栏右组有一张卡片。它始终渲染，不可用时
+    // 只是 enabled: false（变灰），所以这里断言 enabled 而不是找 onPressed。
+    expect(_tool(tester, '撤销').enabled, isFalse);
 
     await tester.tap(_toolButton('矩形'));
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(400, 300), const Offset(100, 100));
     await tester.pumpAndSettle();
 
-    final enabledUndo = tester.widget<WbIconButton>(_iconButton('撤销  Ctrl+Z'));
-    expect(enabledUndo.onPressed, isNotNull);
+    expect(_tool(tester, '撤销').enabled, isTrue);
 
-    await tester.tap(_iconButton('撤销  Ctrl+Z'));
+    await tester.tap(_toolButton('撤销'));
     await tester.pumpAndSettle();
     expect(find.text('0 个元素'), findsOneWidget);
   });
