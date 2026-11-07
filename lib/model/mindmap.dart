@@ -273,11 +273,15 @@ class MindMapLayoutEngine {
     final lineHeight = fontSize * 1.3;
     var maxWidth = 0.0;
     for (final line in lines) {
-      final w = measure?.call(line, fontSize) ?? estimateLineWidth(line, fontSize);
+      // measure 返回 double?，estimateLineWidth 返回 double —— `??` 的结果
+      // 会被推断成 num，必须显式标成 double，否则下面比较时报 Object。
+      final double w =
+          measure?.call(line, fontSize) ?? estimateLineWidth(line, fontSize);
       if (w > maxWidth) maxWidth = w;
     }
     return Size(
-      math.max(minWidth, maxWidth + paddingX * 2),
+      // math.max 对 double 返回 num，Size 要 double，这里要显式取 double。
+      math.max(minWidth, maxWidth + paddingX * 2).toDouble(),
       lines.length * lineHeight + paddingY * 2,
     );
   }
@@ -342,7 +346,8 @@ class MindMapLayoutEngine {
           total += subtreeHeight(child);
         }
         total += (children.length - 1) * nodeGap;
-        final result = math.max(self, total);
+        // math.max 对 double 返回 num，而这两个函数声明返回 double，必须转。
+        final result = math.max(self, total).toDouble();
         heightCache[node.id] = result;
         return result;
       }
@@ -403,7 +408,8 @@ class MindMapLayoutEngine {
           total += subtreeWidth(child);
         }
         total += (children.length - 1) * nodeGap;
-        final result = math.max(self, total);
+        // math.max 对 double 返回 num，而这两个函数声明返回 double，必须转。
+        final result = math.max(self, total).toDouble();
         widthCache[node.id] = result;
         return result;
       }

@@ -92,7 +92,8 @@ Uint8List _buildZip(Map<String, List<int>> entries, {bool deflate = false}) {
 
 /// 裸 deflate 压缩（不带 zlib 头）。
 Uint8List _deflateRaw(Uint8List data) {
-  final encoded = const ZLibEncoder(raw: true).convert(data);
+  // ZLibEncoder 没有 const 构造，这里必须用普通实例化。
+  final encoded = ZLibEncoder(raw: true).convert(data);
   return Uint8List.fromList(encoded);
 }
 

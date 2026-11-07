@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io' show RawZLibFilter;
 import 'dart:typed_data';
 
-import 'mindmap.dart';
+import '../model/mindmap.dart';
 
 /// 支持的思维导图文件格式。
 enum MindMapFormat {
